@@ -13,69 +13,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils.db_helper import get_db_connection
 
 
-def check_table_structure():
-    """检查stock_pool表结构"""
-    print("=" * 60)
-    print("📊 检查 stock_pool 表结构")
-    print("=" * 60)
-
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-
-            # 查询表结构
-            cursor.execute("PRAGMA table_info(stock_pool)")
-            columns = cursor.fetchall()
-
-            print("\n当前表结构:")
-            for col in columns:
-                print(f"  {col['name']:20s} {col['type']:10s}")
-
-            return columns
-
-    except Exception as e:
-        print(f"❌ 查询失败: {e}")
-        return None
-
-
-def update_table_structure():
-    """更新表结构，添加缺失的字段"""
-    print("\n" + "=" * 60)
-    print("🔧 更新表结构")
-    print("=" * 60)
-
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-
-            # 检查并添加字段
-            columns_to_add = {
-                'symbol': 'TEXT',
-                'area': 'TEXT',
-                'industry': 'TEXT',
-                'list_date': 'TEXT'
-            }
-
-            for col_name, col_type in columns_to_add.items():
-                # 检查字段是否存在
-                cursor.execute(f"PRAGMA table_info(stock_pool)")
-                existing_columns = [c['name'] for c in cursor.fetchall()]
-
-                if col_name not in existing_columns:
-                    print(f"  ➕ 添加字段: {col_name} ({col_type})")
-                    cursor.execute(f"ALTER TABLE stock_pool ADD COLUMN {col_name} {col_type}")
-                else:
-                    print(f"  ✅ 字段已存在: {col_name}")
-
-            conn.commit()
-            print("\n✅ 表结构更新完成！")
-            return True
-
-    except Exception as e:
-        print(f"❌ 更新失败: {e}")
-        return False
-
-
 def import_stocks_from_csv():
     """从CSV导入股票数据"""
     print("\n" + "=" * 60)
@@ -166,18 +103,7 @@ def main():
     print("🚀 A股列表导入工具")
     print("=" * 60)
 
-    # 1. 检查表结构
-    columns = check_table_structure()
-    if not columns:
-        print("\n❌ 无法继续，请检查数据库连接")
-        return
-
-    # 2. 更新表结构
-    if not update_table_structure():
-        print("\n❌ 表结构更新失败，无法继续")
-        return
-
-    # 3. 导入数据
+    # 导入数据
     if import_stocks_from_csv():
         print("\n" + "=" * 60)
         print("🎉 所有操作完成！")

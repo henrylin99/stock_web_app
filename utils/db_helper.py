@@ -123,7 +123,11 @@ def init_db():
                 stock_name TEXT,
                 pool_name TEXT DEFAULT 'default',
                 add_date DATE DEFAULT CURRENT_DATE,
-                note TEXT
+                note TEXT,
+                symbol TEXT,
+                area TEXT,
+                industry TEXT,
+                list_date TEXT
             )
         """)
 
