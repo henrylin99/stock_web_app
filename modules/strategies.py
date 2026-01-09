@@ -13,7 +13,6 @@ import os
 # 添加父目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import config
 from utils.db_helper import execute_query, execute_insert, get_db_connection
 
 
@@ -33,7 +32,7 @@ def render():
     ])
 
     with tab1:
-        render_strategy_config()
+        render_strategy_config_v2()
 
     with tab2:
         render_my_strategies()
@@ -42,224 +41,166 @@ def render():
         render_strategy_guide()
 
 
-# ============ 策略配置 ============
+# ============ 策略配置（V2版本 - 使用模板引擎）============
 
-def render_strategy_config():
-    """渲染策略配置页面"""
+def render_strategy_config_v2():
+    """
+    渲染策略配置页面（新版本 - 使用模板引擎）
 
+    新版本特性：
+    - 条件可选：用户可以选择需要的条件
+    - 参数化：支持动态参数配置
+    - SQL预览：实时预览生成的SQL
+    """
     st.subheader("策略配置器")
 
-    # 加载策略模板
-    templates = load_strategy_templates()
+    try:
+        from utils.strategy_template_engine import StrategyTemplateEngine
 
-    # 过滤出真正的策略类型（排除元数据键）
-    metadata_keys = {'策略版本', '更新日期', 'version', 'update_date'}
-    strategy_types = [k for k in templates.keys() if k not in metadata_keys]
+        # 初始化引擎
+        engine = StrategyTemplateEngine()
 
-    # 检查是否是编辑模式
-    edit_mode = st.session_state.editing_strategy_id is not None
-    edit_strategy_id = st.session_state.editing_strategy_id
-    edit_strategy_data = None
+        # 获取所有策略分类
+        all_strategies = engine.get_all_strategies_ui_config()
 
-    # 如果是编辑模式，获取策略数据
-    if edit_mode:
-        strategies = get_user_strategies()
-        if strategies is not None and len(strategies) > 0:
-            edit_strategy_data = strategies[strategies['id'] == int(edit_strategy_id)]
-            if len(edit_strategy_data) == 0:
-                # 策略不存在，清除编辑状态
-                st.session_state.editing_strategy_id = None
-                edit_mode = False
-                edit_strategy_data = None
-
-    # 选择策略类型
-    col1, col2 = st.columns(2)
-
-    with col1:
-        strategy_type = st.selectbox(
-            "策略类型",
-            options=strategy_types,
-            help="选择策略类型",
-            index=0 if not edit_mode or edit_strategy_data is None or len(edit_strategy_data) == 0 else (strategy_types.index(edit_strategy_data.iloc[0]['strategy_type']) if edit_strategy_data.iloc[0]['strategy_type'] in strategy_types else 0)
-        )
-
-    with col2:
-        # 确保 strategy_type 对应的值是字典
-        if isinstance(templates[strategy_type], dict):
-            strategies = list(templates[strategy_type].keys())
-        else:
-            st.error(f"策略类型 '{strategy_type}' 的数据格式错误")
-            return
-
-        # 如果是编辑模式，默认选中当前策略的模板
-        default_strategy_idx = 0
-        if edit_mode and edit_strategy_data is not None and len(edit_strategy_data) > 0:
-            template_name = edit_strategy_data.iloc[0]['template_name']
-            if template_name in strategies:
-                default_strategy_idx = strategies.index(template_name)
-
-        strategy_name = st.selectbox(
-            "具体策略",
-            options=strategies,
-            index=default_strategy_idx
-        )
-
-    # 显示策略说明
-    template = templates[strategy_type][strategy_name]
-
-    st.markdown("---")
-    if edit_mode:
-        st.markdown("### ✏️ 编辑策略")
-        st.info("💡 正在编辑策略，修改参数后点击「更新策略」保存，或点击「取消编辑」返回")
-    else:
-        st.markdown(f"### 📖 {strategy_name}")
-
-    # 策略信息卡片
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.info(f"**适用场景**: {template['适用场景']}")
-
-    with col2:
-        risk_colors = {"低": "🟢", "中": "🟡", "高": "🟠", "极高": "🔴"}
-        st.markdown(f"**风险等级**: {risk_colors.get(template['风险等级'], '')} {template['风险等级']}")
-
-    with col3:
-        st.markdown(f"**策略说明**: {template['描述']}")
-
-    st.markdown("---")
-
-    # 参数配置
-    st.markdown("### 🎛️ 参数配置")
-
-    user_params = {}
-
-    # 如果是编辑模式，加载原有参数
-    if edit_mode and edit_strategy_data is not None and len(edit_strategy_data) > 0:
-        try:
-            user_params = json.loads(edit_strategy_data.iloc[0]['params_json'])
-        except (json.JSONDecodeError, KeyError, TypeError):
-            user_params = {}
-
-    # 动态生成参数输入控件
-    params = template['参数']
-
-    # 两列布局显示参数
-    param_names = list(params.keys())
-    mid = len(param_names) // 2
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        for param_name in param_names[:mid]:
-            param_config = params[param_name]
-            # 使用已有参数值作为默认值
-            if param_name in user_params:
-                param_config = param_config.copy()
-                param_config['默认值'] = user_params[param_name]
-            value = render_param_input(param_name, param_config)
-            user_params[param_name] = value
-
-    with col2:
-        for param_name in param_names[mid:]:
-            param_config = params[param_name]
-            # 使用已有参数值作为默认值
-            if param_name in user_params:
-                param_config = param_config.copy()
-                param_config['默认值'] = user_params[param_name]
-            value = render_param_input(param_name, param_config)
-            user_params[param_name] = value
-
-    st.markdown("---")
-
-    # 策略预览
-    with st.expander("👁️ 策略预览", expanded=False):
-        st.markdown("**生成的SQL条件:**")
-        sql_condition = generate_sql_condition(strategy_name, template, user_params)
-        st.code(sql_condition, language="sql")
-
-    # 保存策略
-    st.markdown("### 💾 保存策略")
-
-    if edit_mode:
-        col1, col2, col3, col4 = st.columns(4)
+        # 选择策略类型和具体策略
+        col1, col2 = st.columns(2)
 
         with col1:
-            # 编辑模式：使用原名称
-            default_name = ""
-            default_desc = ""
-            if edit_strategy_data is not None and len(edit_strategy_data) > 0:
-                default_name = edit_strategy_data.iloc[0]['strategy_name']
-                default_desc = edit_strategy_data.iloc[0].get('description', '')
-
-            save_name = st.text_input(
-                "策略名称",
-                value=default_name,
-                help="策略名称（不可修改）",
-                disabled=True
+            category = st.selectbox(
+                "策略类型",
+                options=list(all_strategies.keys()),
+                help="选择策略类型",
+                key="v2_category"
             )
 
         with col2:
-            save_description = st.text_input(
-                "策略说明（可选）",
-                value=default_desc,
-                help="简单描述你的策略思路"
+            strategies_in_category = all_strategies[category]
+            strategy_options = [f"{s['name']} ({s['id']})" for s in strategies_in_category]
+            selected_display = st.selectbox(
+                "具体策略",
+                options=strategy_options,
+                help="选择具体策略",
+                key="v2_strategy_select"
             )
 
+            # 从显示名称中提取 strategy_id
+            strategy_id = selected_display.split('(')[-1].rstrip(')')
+
+        # 获取策略配置
+        strategy_config = engine.get_strategy_ui_config(strategy_id)
+
+        # 显示策略信息
+        st.markdown("---")
+        st.markdown(f"### 📖 {strategy_config['name']}")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.info(f"**适用场景**: {category}")
+
+        with col2:
+            risk_colors = {"低": "🟢", "中": "🟡", "高": "🟠"}
+            st.markdown(f"**风险等级**: {risk_colors.get(strategy_config['risk_level'], '')} {strategy_config['risk_level']}")
+
         with col3:
-            if st.button("💾 更新策略", type="primary"):
-                success = update_strategy(
-                    int(edit_strategy_id),
-                    save_name,
-                    strategy_type,
-                    strategy_name,
-                    user_params,
-                    save_description
-                )
-                if success:
-                    st.success(f"✅ 策略 '{save_name}' 已更新！")
-                    # 清除编辑状态
-                    clear_edit_state()
-                    st.rerun()
-                else:
-                    st.error("❌ 更新失败")
+            st.markdown(f"**组合逻辑**: {strategy_config['combine_logic']}")
 
-        with col4:
-            if st.button("❌ 取消编辑"):
-                clear_edit_state()
-                st.info("已取消编辑")
-                st.rerun()
+        st.markdown(f"**策略说明**: {strategy_config['description']}")
 
-    else:
+        st.markdown("---")
+
+        # 条件选择
+        st.markdown("### 🎛️ 条件选择（可多选）")
+
+        selected_conditions = []
+        condition_params = {}
+
+        for cond_config in strategy_config['conditions']:
+            with st.container():
+                col1, col2 = st.columns([4, 1])
+
+                with col1:
+                    # 条件选择复选框
+                    is_selected = st.checkbox(
+                        cond_config['label'],
+                        value=cond_config['enabled'],
+                        key=f"v2_cond_{cond_config['id']}",
+                        help=f"ID: {cond_config['id']}"
+                    )
+
+                    if is_selected:
+                        selected_conditions.append(cond_config['id'])
+
+                        # 显示参数配置
+                        if cond_config['params']:
+                            with st.expander("配置参数", expanded=False):
+                                for param_config in cond_config['params']:
+                                    value = render_param_input_v2(param_config)
+                                    condition_params[param_config['name']] = value
+
+                with col2:
+                    if cond_config['required']:
+                        st.caption("⚠️ 必需")
+
+        st.markdown("---")
+
+        # SQL预览
+        with st.expander("👁️ SQL预览", expanded=False):
+            user_config = {
+                'selected_conditions': selected_conditions,
+                'params': condition_params
+            }
+
+            try:
+                where_clause, params = engine.build_sql(strategy_id, user_config)
+
+                st.markdown("**WHERE条件:**")
+                st.code(f"WHERE {where_clause}", language="sql")
+
+                if params:
+                    st.markdown("**参数值:**")
+                    for i, param in enumerate(params):
+                        st.text(f"?{i+1} = {param}")
+
+            except Exception as e:
+                st.error(f"SQL生成失败: {e}")
+
+        st.markdown("---")
+
+        # 保存策略
+        st.markdown("### 💾 保存策略")
+
         col1, col2, col3 = st.columns(3)
 
         with col1:
             save_name = st.text_input(
                 "策略名称",
-                value=f"{strategy_name}_自定义",
-                help="为你的策略起个名字"
+                value=f"{strategy_config['name']}_自定义",
+                help="为你的策略起个名字",
+                key="v2_save_name"
             )
 
         with col2:
             save_description = st.text_input(
                 "策略说明（可选）",
                 value="",
-                help="简单描述你的策略思路"
+                help="简单描述你的策略思路",
+                key="v2_save_description"
             )
 
         with col3:
-            if st.button("💾 保存策略", type="primary"):
+            if st.button("💾 保存策略", type="primary", key="v2_save_button"):
                 if save_name:
-                    # 检查是否已存在
-                    if check_strategy_exists(save_name):
+                    if check_strategy_exists_v2(save_name):
                         st.warning(f"⚠️ 策略 '{save_name}' 已存在，请使用其他名称")
                     else:
-                        # 保存新策略
-                        success = save_strategy(
+                        # 保存新格式策略
+                        success = save_strategy_v2(
                             save_name,
-                            strategy_type,
-                            strategy_name,
-                            user_params,
+                            strategy_id,
+                            selected_conditions,
+                            condition_params,
                             save_description
                         )
 
@@ -269,6 +210,134 @@ def render_strategy_config():
                             st.error("❌ 保存失败")
                 else:
                     st.warning("⚠️ 请输入策略名称")
+
+    except Exception as e:
+        st.error(f"策略配置错误: {e}")
+        st.exception(e)
+
+
+def render_param_input_v2(param_config):
+    """
+    渲染参数输入控件（新版本）
+
+    参数:
+        param_config: 参数配置字典 {
+            'name': 'volume_ratio',
+            'label': '放量倍数',
+            'type': 'float',
+            'default': 2.0,
+            'min': 1.5,
+            'max': 5.0,
+            'step': 0.1
+        }
+
+    返回:
+        参数值
+    """
+    param_type = param_config['type']
+    label = param_config['label']
+    default = param_config['default']
+    min_val = param_config.get('min')
+    max_val = param_config.get('max')
+    step = param_config.get('step')
+
+    # 为每个参数生成唯一的 key
+    param_key = f"v2_param_{param_config['name']}"
+
+    if param_type == 'int':
+        if min_val is not None and max_val is not None:
+            return st.slider(
+                label,
+                min_value=int(min_val),
+                max_value=int(max_val),
+                value=int(default),
+                step=int(step) if step else 1,
+                key=param_key
+            )
+        else:
+            return st.number_input(
+                label,
+                value=int(default),
+                key=param_key
+            )
+
+    elif param_type == 'float':
+        if min_val is not None and max_val is not None:
+            return st.slider(
+                label,
+                min_value=float(min_val),
+                max_value=float(max_val),
+                value=float(default),
+                step=float(step) if step else 0.01,
+                key=param_key
+            )
+        else:
+            return st.number_input(
+                label,
+                value=float(default),
+                key=param_key
+            )
+
+    elif param_type == 'bool':
+        return st.checkbox(
+            label,
+            value=bool(default),
+            key=param_key
+        )
+
+    else:
+        return st.text_input(
+            label,
+            value=str(default),
+            key=param_key
+        )
+
+
+def save_strategy_v2(name, strategy_id, selected_conditions, params, description=None):
+    """
+    保存策略（V2版本 - 新格式）
+
+    参数:
+        name: 策略名称
+        strategy_id: 策略模板ID
+        selected_conditions: 选中的条件列表
+        params: 参数字典
+        description: 策略说明
+
+    返回:
+        bool: 是否成功
+    """
+    try:
+        data = {
+            'user_id': 'default',
+            'strategy_name': name,
+            'strategy_type': strategy_id,  # 使用 strategy_id 作为类型
+            'template_name': 'template_v2',  # 标记为新版本
+            'params_json': json.dumps({
+                'strategy_id': strategy_id,
+                'selected_conditions': selected_conditions,
+                'params': params
+            }, ensure_ascii=False),
+            'description': description
+        }
+
+        execute_insert('user_strategies', data)
+        return True
+
+    except Exception as e:
+        st.error(f"保存失败: {e}")
+        return False
+
+
+def check_strategy_exists_v2(strategy_name):
+    """检查策略是否已存在（V2版本）"""
+    try:
+        sql = "SELECT COUNT(*) as count FROM user_strategies WHERE strategy_name = ?"
+        result = execute_query(sql, [strategy_name], fetch_one=True)
+        return result['count'] > 0 if result else False
+
+    except Exception as e:
+        return False
 
 
 # ============ 我的策略 ============
@@ -324,51 +393,45 @@ def render_my_strategies():
 
             st.markdown("---")
 
-            # 参数显示
-            st.markdown("**参数配置**:")
-
-            try:
-                params = json.loads(strategy['params_json'])
-
-                for param_name, param_value in params.items():
-                    st.markdown(f"- **{param_name}**: {param_value}")
-
-            except:
-                st.warning("参数解析失败")
-
-            st.markdown("---")
-
             # 操作按钮
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
-                if st.button("📝 编辑", key=f"edit_{strategy['id']}"):
-                    # 设置编辑状态
+                if st.button(f"✏️ 编辑", key=f"edit_{strategy['id']}"):
                     st.session_state.editing_strategy_id = strategy['id']
-                    st.success(f"✅ 正在编辑策略: {strategy['strategy_name']}，请切换到「配置策略」标签页")
                     st.rerun()
 
             with col2:
-                if st.button("📋 复制", key=f"copy_{strategy['id']}"):
-                    copy_strategy(strategy['id'])
-                    st.success("✅ 已复制")
-
-            with col3:
                 new_status = not strategy['is_active']
-                action = "启用" if new_status else "禁用"
-                if st.button(action, key=f"toggle_{strategy['id']}"):
+                status_text = "禁用" if strategy['is_active'] else "启用"
+                if st.button(f"{status_text}", key=f"toggle_{strategy['id']}"):
                     toggle_strategy_status(strategy['id'], new_status)
                     st.rerun()
 
-            with col4:
-                if st.button("🗑️ 删除", key=f"delete_{strategy['id']}", type="secondary"):
-                    if st.session_state.get(f'confirm_delete_{strategy["id"]}', False):
-                        delete_strategy(strategy['id'])
-                        st.success("✅ 已删除")
+            with col3:
+                if st.button(f"📋 复制", key=f"copy_{strategy['id']}"):
+                    if copy_strategy(strategy['id']):
+                        st.success("✅ 已复制")
                         st.rerun()
-                    else:
-                        st.session_state[f'confirm_delete_{strategy["id"]}'] = True
-                        st.warning("⚠️ 再次点击确认删除")
+
+            with col4:
+                # 使用独立的标志键和按钮键
+                confirm_key = f'show_confirm_{strategy["id"]}'
+                if not st.session_state.get(confirm_key, False):
+                    if st.button(f"🗑️ 删除", key=f"delete_btn_{strategy['id']}"):
+                        st.session_state[confirm_key] = True
+                        st.rerun()
+                else:
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if st.button(f"⚠️ 确认", key=f"confirm_yes_{strategy['id']}", type="primary"):
+                            delete_strategy(strategy['id'])
+                            st.success("✅ 已删除")
+                            st.rerun()
+                    with col_b:
+                        if st.button(f"❌ 取消", key=f"confirm_no_{strategy['id']}"):
+                            st.session_state[confirm_key] = False
+                            st.rerun()
 
 
 # ============ 策略说明 ============
@@ -450,139 +513,6 @@ def render_strategy_guide():
 
 # ============ 辅助函数 ============
 
-def load_strategy_templates():
-    """加载策略模板"""
-    try:
-        template_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            'templates',
-            'strategy_templates.json'
-        )
-
-        with open(template_path, 'r', encoding='utf-8') as f:
-            templates = json.load(f)
-
-        return templates
-
-    except Exception as e:
-        st.error(f"加载策略模板失败: {e}")
-        return {}
-
-
-def render_param_input(param_name, param_config):
-    """渲染参数输入控件"""
-
-    param_type = param_config.get('类型', 'slider')
-    default_value = param_config.get('默认值')
-    min_value = param_config.get('最小值')
-    max_value = param_config.get('最大值')
-    label = param_config.get('标签', param_name)
-    description = param_config.get('说明', '')
-
-    if param_type == 'slider':
-        # 判断是否需要使用浮点数
-        is_float = any(isinstance(v, float) for v in [default_value, min_value, max_value] if v is not None)
-
-        if is_float:
-            value = st.slider(
-                f"{label} {description}",
-                min_value=float(min_value) if min_value is not None else 0.0,
-                max_value=float(max_value) if max_value is not None else 100.0,
-                value=float(default_value) if default_value is not None else 0.0,
-                step=0.01,
-                help=description
-            )
-        else:
-            value = st.slider(
-                f"{label} {description}",
-                min_value=int(min_value) if min_value is not None else 0,
-                max_value=int(max_value) if max_value is not None else 100,
-                value=int(default_value) if default_value is not None else 0,
-                step=1,
-                help=description
-            )
-
-    elif param_type == 'checkbox':
-        value = st.checkbox(
-            label,
-            value=bool(default_value),
-            help=description
-        )
-
-    else:
-        value = st.number_input(
-            label,
-            value=float(default_value),
-            help=description
-        )
-
-    return value
-
-
-def generate_sql_condition(strategy_name, template, user_params):
-    """生成SQL查询条件"""
-
-    # 这里是简化版本，实际应该根据参数生成SQL
-    base_condition = template.get('SQL条件', '')
-
-    # 替换参数占位符
-    # TODO: 实现更智能的SQL生成逻辑
-
-    return base_condition
-
-
-def save_strategy(name, strategy_type, template_name, params, description=None):
-    """保存策略到数据库"""
-    try:
-        data = {
-            'user_id': 'default',
-            'strategy_name': name,
-            'strategy_type': strategy_type,
-            'template_name': template_name,
-            'params_json': json.dumps(params, ensure_ascii=False),
-            'description': description
-        }
-
-        execute_insert('user_strategies', data)
-        return True
-
-    except Exception as e:
-        st.error(f"保存失败: {e}")
-        return False
-
-
-def clear_edit_state():
-    """清除所有编辑状态"""
-    st.session_state.editing_strategy_id = None
-    # 同时清除旧的编辑状态
-    for key in list(st.session_state.keys()):
-        if key.startswith('edit_strategy_'):
-            del st.session_state[key]
-
-
-def update_strategy(strategy_id, name, strategy_type, template_name, params, description=None):
-    """更新策略"""
-    try:
-        from utils.db_helper import get_db_connection
-        with get_db_connection() as conn:
-            sql = """
-                UPDATE user_strategies
-                SET strategy_name = ?, strategy_type = ?, template_name = ?,
-                    params_json = ?, description = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """
-            conn.execute(sql, [
-                name, strategy_type, template_name,
-                json.dumps(params, ensure_ascii=False), description, strategy_id
-            ])
-            conn.commit()
-        return True
-
-    except Exception as e:
-        st.error(f"更新失败: {e}")
-        return False
-
-
 def get_user_strategies(user_id='default'):
     """获取用户策略列表"""
     try:
@@ -605,17 +535,6 @@ def get_user_strategies(user_id='default'):
     except Exception as e:
         st.error(f"获取策略列表失败: {e}")
         return pd.DataFrame()
-
-
-def check_strategy_exists(strategy_name):
-    """检查策略是否已存在"""
-    try:
-        sql = "SELECT COUNT(*) as count FROM user_strategies WHERE strategy_name = ?"
-        result = execute_query(sql, [strategy_name], fetch_one=True)
-        return result['count'] > 0 if result else False
-
-    except Exception as e:
-        return False
 
 
 def copy_strategy(strategy_id):

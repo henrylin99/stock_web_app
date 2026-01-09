@@ -1,0 +1,368 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+策略定义文件
+包含9个可以用现有数据库字段实现的策略
+
+注意：以下策略因缺失字段而未实现：
+- 箱体突破（需要 max_high_20d）
+- 连续上涨（需要 consecutive_up_days）
+- 回踩均线（需要前一日数据）
+- MACD底背离（需要历史数据对比）
+- 低位十字星（需要 body_ratio）
+-->
+<strategies>
+    <!-- ==================== 趋势型策略 ==================== -->
+
+    <strategy id="ma_bullish_alignment"
+              name="均线多头排列"
+              category="趋势型策略"
+              risk="中"
+              description="短期均线在上，长期均线在下，形成多头排列（简化版：仅使用ma5/10/20/60）">
+
+        <condition id="cond_ma5_gt_ma10"
+                   label="MA5 > MA10"
+                   enabled="true"
+                   required="false"
+                   sort_order="1">
+            <sql><![CDATA[ma5 > ma10]]></sql>
+        </condition>
+
+        <condition id="cond_ma10_gt_ma20"
+                   label="MA10 > MA20"
+                   enabled="true"
+                   required="false"
+                   sort_order="2">
+            <sql><![CDATA[ma10 > ma20]]></sql>
+        </condition>
+
+        <condition id="cond_ma20_gt_ma60"
+                   label="MA20 > MA60"
+                   enabled="true"
+                   required="false"
+                   sort_order="3">
+            <sql><![CDATA[ma20 > ma60]]></sql>
+        </condition>
+
+        <condition id="cond_price_above_ma5"
+                   label="收盘价高于MA5"
+                   enabled="false"
+                   required="false"
+                   sort_order="4">
+            <sql><![CDATA[close > ma5]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="macd_golden_cross"
+              name="MACD金叉"
+              category="趋势型策略"
+              risk="中"
+              description="DIF线上穿DEA线，形成金叉，是买入信号">
+
+        <condition id="cond_dif_gt_dea"
+                   label="DIF > DEA（金叉）"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[dif > dea]]></sql>
+        </condition>
+
+        <condition id="cond_dif_above_zero"
+                   label="DIF在零轴上方"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[dif > 0]]></sql>
+        </condition>
+
+        <condition id="cond_positive_macd"
+                   label="MACD柱状图为正"
+                   enabled="false"
+                   required="false">
+            <sql><![CDATA[(dif - dea) > 0]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="trend_following"
+              name="趋势跟踪"
+              category="趋势型策略"
+              risk="低"
+              description="综合多个趋势指标，确认趋势后跟踪">
+
+        <condition id="cond_ma_trend"
+                   label="MA趋势向上"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[ma5 > ma20]]></sql>
+        </condition>
+
+        <condition id="cond_macd_confirm"
+                   label="MACD确认"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[dif > dea]]></sql>
+        </condition>
+
+        <condition id="cond_volume_confirm"
+                   label="成交量放大"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[volume > vma5]]></sql>
+        </condition>
+
+        <condition id="cond_price_rise"
+                   label="股价上涨"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[change_pct > 0]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <!-- ==================== 突破型策略 ==================== -->
+
+    <strategy id="volume_breakout"
+              name="放量突破"
+              category="突破型策略"
+              risk="中"
+              description="成交量显著放大，股价上涨突破，资金介入信号">
+
+        <condition id="cond_volume_expand"
+                   label="成交量放大"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[volume > vma5 * #{volume_ratio}]]></sql>
+            <params>
+                <param name="volume_ratio"
+                       type="float"
+                       label="放量倍数"
+                       default="2.0"
+                       min="1.5"
+                       max="5.0"
+                       step="0.1"/>
+            </params>
+        </condition>
+
+        <condition id="cond_price_rise"
+                   label="价格上涨"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[change_pct > #{price_rise}]]></sql>
+            <params>
+                <param name="price_rise"
+                       type="float"
+                       label="最小涨幅(%)"
+                       default="3.0"
+                       min="1.0"
+                       max="10.0"
+                       step="0.5"/>
+            </params>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="boll_breakout"
+              name="布林带突破"
+              category="突破型策略"
+              risk="中"
+              description="股价突破布林带上轨，强势特征">
+
+        <condition id="cond_boll_breakout"
+                   label="突破上轨"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[close > boll_upper]]></sql>
+        </condition>
+
+        <condition id="cond_volume_confirm"
+                   label="成交量确认"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[volume > vma5]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="volume_expand_after_shrink"
+              name="缩量后放量"
+              category="突破型策略"
+              risk="中"
+              description="前期缩量整理，后突然放量拉升，主力启动信号（简化版：单日放量判断）">
+
+        <condition id="cond_volume_expand"
+                   label="放量"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[volume > vma5 * #{expand_ratio}]]></sql>
+            <params>
+                <param name="expand_ratio"
+                       type="float"
+                       label="放量倍数"
+                       default="2.0"
+                       min="1.5"
+                       max="5.0"
+                       step="0.1"/>
+            </params>
+        </condition>
+
+        <condition id="cond_price_above_ma"
+                   label="价格突破短期均线"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[close > ma5]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <!-- ==================== 震荡型策略 ==================== -->
+
+    <strategy id="kdj_oversold_golden_cross"
+              name="KDJ低位金叉"
+              category="震荡型策略"
+              risk="低"
+              description="KDJ指标在超卖区金叉，反弹信号">
+
+        <condition id="cond_kdj_oversold"
+                   label="KDJ超卖"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[k < #{oversold_level}]]></sql>
+            <params>
+                <param name="oversold_level"
+                       type="int"
+                       label="超卖阈值"
+                       default="20"
+                       min="10"
+                       max="30"
+                       step="1"/>
+            </params>
+        </condition>
+
+        <condition id="cond_kdj_cross"
+                   label="K线上穿D线"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[k > d]]></sql>
+        </condition>
+
+        <condition id="cond_j_confirm"
+                   label="J值确认"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[j > k]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="kdj_any_golden_cross"
+              name="KDJ任意金叉"
+              category="震荡型策略"
+              risk="中"
+              description="KDJ指标金叉，不限位置（简化版：过滤高位金叉）">
+
+        <condition id="cond_kdj_cross"
+                   label="K线上穿D线"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[k > d]]></sql>
+        </condition>
+
+        <condition id="cond_not_overbought"
+                   label="非高位"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[k < 80]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="rsi_oversold"
+              name="RSI超卖"
+              category="震荡型策略"
+              risk="低"
+              description="RSI指标超卖，可能反弹">
+
+        <condition id="cond_rsi_oversold"
+                   label="RSI超卖"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[rsi6 < #{oversold_level}]]></sql>
+            <params>
+                <param name="oversold_level"
+                       type="int"
+                       label="超卖阈值"
+                       default="20"
+                       min="10"
+                       max="30"
+                       step="1"/>
+            </params>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="rsi_low"
+              name="RSI低位"
+              category="震荡型策略"
+              risk="低"
+              description="RSI指标处于低位">
+
+        <condition id="cond_rsi_low"
+                   label="RSI低位"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[rsi6 < #{low_level}]]></sql>
+            <params>
+                <param name="low_level"
+                       type="int"
+                       label="低位阈值"
+                       default="30"
+                       min="20"
+                       max="40"
+                       step="1"/>
+            </params>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+    <strategy id="boll_lower_support"
+              name="布林带下轨支撑"
+              category="震荡型策略"
+              risk="低"
+              description="股价触及布林带下轨获得支撑，是买入机会">
+
+        <condition id="cond_touch_lower"
+                   label="触及下轨"
+                   enabled="true"
+                   required="true">
+            <sql><![CDATA[close <= boll_lower * (1 + #{touch_ratio}/100)]]></sql>
+            <params>
+                <param name="touch_ratio"
+                       type="float"
+                       label="触及误差(%)"
+                       default="2.0"
+                       min="0.5"
+                       max="5.0"
+                       step="0.1"/>
+            </params>
+        </condition>
+
+        <condition id="cond_not_break"
+                   label="未有效跌破"
+                   enabled="true"
+                   required="false">
+            <sql><![CDATA[close >= boll_lower * 0.98]]></sql>
+        </condition>
+
+        <combineLogic>AND</combineLogic>
+    </strategy>
+
+</strategies>

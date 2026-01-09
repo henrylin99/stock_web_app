@@ -26,6 +26,13 @@
 
 ### Windows用户
 
+#### anaconda下载地址
+下载地址：
+https://mirrors.tuna.tsinghua.edu.cn/anaconda/archive/
+
+#### python下载地址，建议用3.12.10
+https://www.python.org/downloads/windows/
+
 双击运行 `start.bat`，或在命令行执行：
 
 ```batch

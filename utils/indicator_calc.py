@@ -509,6 +509,9 @@ def save_indicators_to_db(ts_code, df, frequency='d', save_all=False):
                 df = df.tail(1)
 
             # 保存数据
+            # 注意：只保存数据库中实际存在的字段
+            # 扩展字段（max_high_5d, consecutive_up_days 等）不保存到数据库
+            # 因为这些字段在策略模板引擎中未被使用
             for _, row in df.iterrows():
                 conn.execute("""
                     INSERT OR REPLACE INTO stock_indicators
@@ -520,14 +523,7 @@ def save_indicators_to_db(ts_code, df, frequency='d', save_all=False):
                      k, d, j,
                      rsi6, rsi12, rsi24,
                      boll_upper, boll_mid, boll_lower,
-                     atr14,
-                     max_high_5d, max_high_10d, max_high_20d, max_high_60d,
-                     max_low_5d, max_low_10d, max_low_20d, max_low_60d,
-                     prev_close, prev_high, prev_low, prev_volume, prev_change_pct,
-                     consecutive_up_days, consecutive_down_days,
-                     body, body_ratio, upper_shadow, lower_shadow,
-                     upper_shadow_ratio, lower_shadow_ratio,
-                     position_20d, position_60d)
+                     atr14)
                     VALUES (?, ?, ?,
                             ?, ?, ?, ?,
                             ?, ?,
@@ -536,14 +532,7 @@ def save_indicators_to_db(ts_code, df, frequency='d', save_all=False):
                             ?, ?, ?,
                             ?, ?, ?,
                             ?, ?, ?,
-                            ?,
-                            ?, ?, ?, ?,
-                            ?, ?, ?, ?,
-                            ?, ?, ?, ?, ?,
-                            ?, ?,
-                            ?, ?, ?, ?,
-                            ?, ?,
-                            ?, ?)
+                            ?)
                 """, (
                     ts_code,
                     row['trade_date'],
@@ -555,14 +544,7 @@ def save_indicators_to_db(ts_code, df, frequency='d', save_all=False):
                     row.get('k'), row.get('d'), row.get('j'),
                     row.get('rsi6'), row.get('rsi12'), row.get('rsi24'),
                     row.get('boll_upper'), row.get('boll_mid'), row.get('boll_lower'),
-                    row.get('atr14'),
-                    row.get('max_high_5d'), row.get('max_high_10d'), row.get('max_high_20d'), row.get('max_high_60d'),
-                    row.get('max_low_5d'), row.get('max_low_10d'), row.get('max_low_20d'), row.get('max_low_60d'),
-                    row.get('prev_close'), row.get('prev_high'), row.get('prev_low'), row.get('prev_volume'), row.get('prev_change_pct'),
-                    row.get('consecutive_up_days'), row.get('consecutive_down_days'),
-                    row.get('body'), row.get('body_ratio'), row.get('upper_shadow'), row.get('lower_shadow'),
-                    row.get('upper_shadow_ratio'), row.get('lower_shadow_ratio'),
-                    row.get('position_20d'), row.get('position_60d')
+                    row.get('atr14')
                 ))
 
             conn.commit()

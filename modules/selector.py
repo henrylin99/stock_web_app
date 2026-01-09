@@ -124,20 +124,82 @@ def render_selection_execute():
         with st.expander("🔍 策略条件预览", expanded=True):
             try:
                 params = json.loads(strategy_info['params_json'])
-                st.markdown("**参数配置**:")
+                template_name = strategy_info['template_name']
 
-                for param_name, param_value in params.items():
-                    st.markdown(f"- **{param_name}**: {param_value}")
+                # 检查是否是新格式（V2版本）
+                if template_name == 'template_v2' or 'strategy_id' in params:
+                    # 使用新版本预览
+                    st.markdown("**新格式策略预览**:")
 
-                st.markdown("---")
+                    # 显示基本信息
+                    st.markdown(f"- **策略ID**: {params.get('strategy_id', 'N/A')}")
+                    st.markdown(f"- **模板版本**: {template_name}")
 
-                # 生成SQL条件
-                sql_condition = generate_strategy_sql(strategy_info, params)
-                st.markdown("**生成的SQL条件**:")
-                st.code(sql_condition, language="sql")
+                    st.markdown("---")
+                    st.markdown("**选择的条件**:")
+
+                    selected_conditions = params.get('selected_conditions', [])
+                    if selected_conditions:
+                        for cond_id in selected_conditions:
+                            st.markdown(f"- {cond_id}")
+                    else:
+                        st.info("未选择任何条件")
+
+                    st.markdown("---")
+                    st.markdown("**参数配置**:")
+
+                    condition_params = params.get('params', {})
+                    if condition_params:
+                        for param_name, param_value in condition_params.items():
+                            st.markdown(f"- **{param_name}**: {param_value}")
+                    else:
+                        st.info("无参数配置")
+
+                    st.markdown("---")
+
+                    # 生成SQL预览
+                    from utils.strategy_template_engine import StrategyTemplateEngine
+                    engine = StrategyTemplateEngine()
+
+                    user_config = {
+                        'selected_conditions': selected_conditions,
+                        'params': condition_params
+                    }
+
+                    strategy_id = params.get('strategy_id', strategy_info['strategy_type'])
+                    where_clause, sql_params = engine.build_sql(strategy_id, user_config)
+
+                    st.markdown("**生成的SQL条件**:")
+                    st.code(f"WHERE {where_clause}", language="sql")
+
+                    if sql_params:
+                        st.markdown("**参数值**:")
+                        for i, param in enumerate(sql_params):
+                            st.text(f"?{i+1} = {param}")
+
+                else:
+                    # 使用旧版本预览
+                    st.markdown("**参数配置**:")
+
+                    for param_name, param_value in params.items():
+                        st.markdown(f"- **{param_name}**: {param_value}")
+
+                    st.markdown("---")
+
+                    # 生成SQL条件
+                    sql, sql_params = generate_strategy_sql(strategy_info, params)
+
+                    st.markdown("**生成的SQL条件**:")
+                    st.code(sql, language="sql")
+
+                    if sql_params:
+                        st.markdown("**参数值**:")
+                        for i, param in enumerate(sql_params):
+                            st.text(f"?{i+1} = {param}")
 
             except Exception as e:
                 st.error(f"解析策略失败: {e}")
+                st.exception(e)
 
     # 执行选股
     if execute_button:
@@ -440,13 +502,19 @@ def get_user_strategies():
 
 
 def execute_strategy(strategy, stock_list, date):
-    """执行选股策略"""
+    """执行选股策略（自动检测新旧格式）"""
 
     try:
         # 解析策略参数
         params = json.loads(strategy['params_json'])
         template_name = strategy['template_name']
 
+        # 检查是否是新格式（V2版本）
+        if template_name == 'template_v2' or 'strategy_id' in params:
+            # 使用新版本执行
+            return execute_strategy_v2(strategy, stock_list, date)
+
+        # 使用旧版本执行
         # 生成SQL查询和参数
         sql, query_params = generate_strategy_sql(strategy, params, stock_list, date)
 
@@ -642,3 +710,96 @@ def delete_selection_history(record_id):
     except Exception as e:
         st.error(f"删除失败: {e}")
         return False
+
+
+# ============ 新版本：使用模板引擎的策略执行 ============
+
+def execute_strategy_v2(strategy, stock_list, date):
+    """
+    执行选股策略（新格式 - 使用模板引擎）
+
+    参数:
+        strategy: 策略信息字典
+        stock_list: 股票代码列表
+        date: 交易日期
+
+    返回:
+        DataFrame: 选股结果
+    """
+    from utils.strategy_template_engine import StrategyTemplateEngine
+
+    try:
+        # 解析策略配置
+        config = json.loads(strategy['params_json'])
+
+        # 检查是否是新格式
+        if 'strategy_id' not in config or 'selected_conditions' not in config:
+            # 不是新格式，返回None让调用方使用旧版本
+            return None
+
+        # 使用新引擎
+        engine = StrategyTemplateEngine()
+
+        user_config = {
+            'selected_conditions': config['selected_conditions'],
+            'params': config.get('params', {})
+        }
+
+        # 生成SQL WHERE条件
+        where_clause, params = engine.build_sql(
+            strategy['strategy_type'],  # 策略模板ID
+            user_config
+        )
+
+        # 构建完整查询
+        full_sql, query_params = build_full_query_v2(where_clause, stock_list, date, params)
+
+        # 执行查询
+        with get_db_connection() as conn:
+            df = pd.read_sql_query(full_sql, conn, params=query_params)
+
+        return df if len(df) > 0 else None
+
+    except Exception as e:
+        st.error(f"执行新格式策略失败: {e}")
+        return None
+
+
+def build_full_query_v2(where_clause, stock_list, date, condition_params):
+    """
+    构建完整的SQL查询（新版本）
+
+    参数:
+        where_clause: WHERE条件
+        stock_list: 股票代码列表
+        date: 交易日期
+        condition_params: 条件参数列表
+
+    返回:
+        (full_sql, query_params): 完整SQL和参数列表
+    """
+    sql = f"""
+        SELECT DISTINCT
+            h.ts_code,
+            p.stock_name,
+            h.close,
+            h.volume,
+            i.change_pct,
+            i.ma5, i.ma10, i.ma20, i.ma60,
+            i.dif, i.dea, i.macd,
+            i.k, i.d, i.j,
+            i.rsi6, i.rsi12, i.rsi24,
+            i.boll_upper, i.boll_mid, i.boll_lower
+        FROM stock_daily_history h
+        JOIN stock_indicators i ON h.ts_code = i.ts_code AND h.trade_date = i.trade_date
+        LEFT JOIN stock_pool p ON h.ts_code = p.ts_code
+        WHERE DATE(h.trade_date) = ?
+          AND h.close IS NOT NULL
+          AND ({where_clause})
+        ORDER BY h.volume DESC
+    """
+
+    # 参数：日期在前，条件参数在后
+    query_params = [date] + condition_params
+
+    return sql, query_params
