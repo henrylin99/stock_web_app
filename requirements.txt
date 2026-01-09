@@ -1,0 +1,27 @@
+# 股票量化选股系统 - 依赖包列表
+
+# Web框架
+streamlit>=1.28.0
+
+# 数据处理
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 数据源
+baostock>=0.8.8
+
+# 数据可视化
+plotly>=5.17.0
+
+# Excel导出
+openpyxl>=3.1.0
+
+# HTTP请求
+requests>=2.31.0
+
+# 性能监控（用于性能测试）
+psutil>=5.9.0
+
+# 注意：项目使用Plotly进行图表渲染，不需要mplfinance和matplotlib
+# 如需使用matplotlib/mplfinance进行自定义开发，可手动安装
+# pip install mplfinance

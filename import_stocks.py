@@ -1,0 +1,190 @@
+# -*- coding: utf-8 -*-
+"""
+导入A股列表到stock_pool表
+"""
+
+import sys
+import os
+import pandas as pd
+
+# 添加项目路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from utils.db_helper import get_db_connection
+
+
+def check_table_structure():
+    """检查stock_pool表结构"""
+    print("=" * 60)
+    print("📊 检查 stock_pool 表结构")
+    print("=" * 60)
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # 查询表结构
+            cursor.execute("PRAGMA table_info(stock_pool)")
+            columns = cursor.fetchall()
+
+            print("\n当前表结构:")
+            for col in columns:
+                print(f"  {col['name']:20s} {col['type']:10s}")
+
+            return columns
+
+    except Exception as e:
+        print(f"❌ 查询失败: {e}")
+        return None
+
+
+def update_table_structure():
+    """更新表结构，添加缺失的字段"""
+    print("\n" + "=" * 60)
+    print("🔧 更新表结构")
+    print("=" * 60)
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # 检查并添加字段
+            columns_to_add = {
+                'symbol': 'TEXT',
+                'area': 'TEXT',
+                'industry': 'TEXT',
+                'list_date': 'TEXT'
+            }
+
+            for col_name, col_type in columns_to_add.items():
+                # 检查字段是否存在
+                cursor.execute(f"PRAGMA table_info(stock_pool)")
+                existing_columns = [c['name'] for c in cursor.fetchall()]
+
+                if col_name not in existing_columns:
+                    print(f"  ➕ 添加字段: {col_name} ({col_type})")
+                    cursor.execute(f"ALTER TABLE stock_pool ADD COLUMN {col_name} {col_type}")
+                else:
+                    print(f"  ✅ 字段已存在: {col_name}")
+
+            conn.commit()
+            print("\n✅ 表结构更新完成！")
+            return True
+
+    except Exception as e:
+        print(f"❌ 更新失败: {e}")
+        return False
+
+
+def import_stocks_from_csv():
+    """从CSV导入股票数据"""
+    print("\n" + "=" * 60)
+    print("📥 导入A股列表")
+    print("=" * 60)
+
+    csv_path = "data/stock_basic.csv"
+
+    try:
+        # 读取CSV文件
+        print(f"\n1️⃣ 读取CSV文件: {csv_path}")
+        df = pd.read_csv(csv_path, encoding='utf-8')
+
+        print(f"   文件包含 {len(df)} 条记录")
+        print(f"   列: {', '.join(df.columns)}")
+
+        # 显示前几条数据
+        print("\n2️⃣ 数据示例:")
+        print(df.head(3).to_string(index=False))
+
+        # 导入数据库
+        print("\n3️⃣ 开始导入数据库...")
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # 清空现有数据
+            cursor.execute("DELETE FROM stock_pool")
+            conn.commit()
+            print(f"   ✅ 已清空现有数据")
+
+            # 批量插入
+            success_count = 0
+            for _, row in df.iterrows():
+                try:
+                    cursor.execute("""
+                        INSERT INTO stock_pool
+                        (ts_code, symbol, stock_name, area, industry, list_date)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        row['ts_code'],
+                        row['symbol'],
+                        row['name'],
+                        row.get('area', ''),
+                        row.get('industry', ''),
+                        row.get('list_date', '')
+                    ))
+                    success_count += 1
+                except Exception as e:
+                    print(f"   ❌ 插入失败 {row['ts_code']}: {e}")
+
+            conn.commit()
+
+            print(f"\n4️⃣ 导入完成！")
+            print(f"   ✅ 成功导入: {success_count} 条")
+            print(f"   ❌ 失败: {len(df) - success_count} 条")
+
+            # 验证导入结果
+            cursor.execute("SELECT COUNT(*) as total FROM stock_pool")
+            total = cursor.fetchone()['total']
+            print(f"\n5️⃣ 验证结果:")
+            print(f"   数据库中现有 {total} 条记录")
+
+            # 显示部分导入的数据
+            cursor.execute("""
+                SELECT ts_code, symbol, stock_name, area, industry, list_date
+                FROM stock_pool
+                LIMIT 5
+            """)
+            records = cursor.fetchall()
+
+            print(f"\n6️⃣ 导入数据示例:")
+            for r in records:
+                print(f"   {r['ts_code']} | {r['symbol']:6s} | {r['stock_name']:8s} | {r['area']:4s} | {r['industry']:4s} | {r['list_date']}")
+
+        print("\n✅ 导入完成！")
+        return True
+
+    except Exception as e:
+        print(f"\n❌ 导入失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def main():
+    """主函数"""
+    print("\n" + "=" * 60)
+    print("🚀 A股列表导入工具")
+    print("=" * 60)
+
+    # 1. 检查表结构
+    columns = check_table_structure()
+    if not columns:
+        print("\n❌ 无法继续，请检查数据库连接")
+        return
+
+    # 2. 更新表结构
+    if not update_table_structure():
+        print("\n❌ 表结构更新失败，无法继续")
+        return
+
+    # 3. 导入数据
+    if import_stocks_from_csv():
+        print("\n" + "=" * 60)
+        print("🎉 所有操作完成！")
+        print("=" * 60)
+    else:
+        print("\n❌ 导入过程中出现错误")
+
+
+if __name__ == "__main__":
+    main()
