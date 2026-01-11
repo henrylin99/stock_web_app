@@ -1,51 +1,51 @@
 @echo off
-chcp 65001 >nul
+REM Stock Quantitative Selection System - Starter Script v1.0
 echo ================================
-echo   股票量化选股系统
-echo   新手版 v1.0
+echo   Stock Quantitative System
+echo   Beginner Edition v1.0
 echo ================================
 echo.
 
-REM 检查Python
+REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ❌ 未找到Python，请先安装Python 3.10+
-    echo    下载地址: https://www.python.org/downloads/
+    echo [ERROR] Python not found. Please install Python 3.10+
+    echo Download: https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
 for /f "tokens=2" %%i in ('python --version') do set PYTHON_VERSION=%%i
-echo ✅ Python版本: %PYTHON_VERSION%
+echo [OK] Python version: %PYTHON_VERSION%
 
-REM 检查虚拟环境
+REM Check virtual environment
 if not exist "venv\" (
     echo.
-    echo 📦 首次运行，正在创建虚拟环境...
+    echo [INFO] First run, creating virtual environment...
     python -m venv venv
     call venv\Scripts\activate
-    echo 📥 正在安装依赖...
+    echo [INFO] Installing dependencies...
     pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ) else (
     call venv\Scripts\activate
 )
 
-REM 检查数据库
+REM Check database
 if not exist "data\stock_data.db" (
     echo.
-    echo 🗄️  正在初始化数据库...
+    echo [INFO] Initializing database...
     if not exist "data" mkdir data
     python -c "from utils.db_helper import init_db; init_db()"
-    echo ✅ 数据库初始化完成
+    echo [OK] Database initialized
 )
 
 echo.
-echo 🚀 启动Web应用...
+echo [INFO] Starting Web application...
 echo.
-echo ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo   访问地址: http://localhost:8501
-echo   按 Ctrl+C 停止服务
-echo ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+echo ===============================================
+echo   Access URL: http://localhost:8501
+echo   Press Ctrl+C to stop service
+echo ===============================================
 echo.
 
 streamlit run app.py
