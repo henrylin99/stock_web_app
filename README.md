@@ -10,7 +10,7 @@
 - 📈 计算常用技术指标
 - ⚙️ 可视化配置选股策略
 - 🎯 一键执行选股
-- 🔔 实时监控股票变化
+- 🔔 实时监控股票变化（未接入实时接口）
 
 ## 🎯 主要特性
 
@@ -77,21 +77,21 @@ stock_web_app/
 │   └── exports/           # 导出文件目录
 │
 ├── modules/                # 功能模块
-│   ├── data_manager.py    # 数据管理模块（开发中）
-│   ├── indicators.py      # 技术指标模块（开发中）
-│   ├── strategies.py      # 策略配置模块（开发中）
-│   ├── selector.py        # 选股执行模块（开发中）
-│   └── monitor.py         # 实时监控模块（开发中）
+│   ├── data_manager.py    # 数据管理模块
+│   ├── indicators.py      # 技术指标模块
+│   ├── strategies.py      # 策略配置模块
+│   ├── selector.py        # 选股执行模块
+│   └── monitor.py         # 实时监控模块
 │
 ├── utils/                  # 工具类
 │   ├── db_helper.py       # 数据库工具 ✅
 │   ├── baostock_client.py # baostock客户端 ✅
-│   ├── indicator_calc.py  # 指标计算工具（待开发）
-│   └── plot_utils.py      # 绘图工具（待开发）
+│   ├── indicator_calc.py  # 指标计算工具
+│   └── plot_utils.py      # 绘图工具
 │
 ├── templates/              # 模板文件
-│   ├── strategy_templates.json # 策略模板（待开发）
-│   └── help.md            # 帮助文档（待开发）
+│   ├── strategy_templates.json # 策略模板
+│   └── help.md            # 帮助文档
 │
 └── logs/                   # 日志目录
     └── app.log
