@@ -26,6 +26,8 @@
 
 ### Windows用户
 
+- anaconda或者python 二选一就行，以免环境冲突，简单一点用python，需要更多功能用anaconda
+
 #### anaconda下载地址
 下载地址：
 https://mirrors.tuna.tsinghua.edu.cn/anaconda/archive/
