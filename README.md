@@ -35,6 +35,8 @@ https://mirrors.tuna.tsinghua.edu.cn/anaconda/archive/
 #### python下载地址，建议用3.12.10
 https://www.python.org/downloads/windows/
 
+#### 查看数据库，免费软件可以下载 https://sqlitebrowser.org/dl/ 然后把stock_data.db文件拖入软件中即可使用，其它软件大部分收费，DB browser, datagrip ……可自行选择。
+
 双击运行 `start.bat`，或在命令行执行：
 
 ```batch
