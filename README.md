@@ -42,6 +42,8 @@ cd stock_web_app
 start.bat
 ```
 
+- 如果启动异常（因环境差别较大，可能会不兼容），请改用手动安装的方式，查看 QUICKSTART.md 文件
+
 ### macOS/Linux用户
 
 在终端执行：
