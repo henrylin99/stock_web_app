@@ -24,6 +24,9 @@
 
 ## 🚀 快速开始
 
+### 视频介绍
+- 可通过百度网盘下载： https://pan.baidu.com/s/1TnXEi2vqZtubRuq-lfMtGQ?pwd=ffvy
+
 ### Windows用户
 
 - anaconda或者python 二选一就行，以免环境冲突，简单一点用python，需要更多功能用anaconda
