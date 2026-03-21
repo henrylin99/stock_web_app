@@ -246,6 +246,12 @@ def render_selector():
     selector.render()
 
 
+def render_screener():
+    """渲染 parquet 选股器页面"""
+    from modules import screener
+    screener.render()
+
+
 def render_monitor():
     """渲染实时监控页面"""
     from modules import monitor
@@ -875,6 +881,7 @@ def main():
                 "📊 数据管理",
                 "📈 技术指标",
                 "⚙️ 策略配置",
+                "🎛️ 选股器",
                 "🎯 执行选股",
                 "🔔 实时监控",
                 "📚 帮助文档"
@@ -917,6 +924,10 @@ def main():
         render_context_help(page)
     elif page == "⚙️ 策略配置":
         render_strategies()
+        from utils.onboarding import render_context_help
+        render_context_help(page)
+    elif page == "🎛️ 选股器":
+        render_screener()
         from utils.onboarding import render_context_help
         render_context_help(page)
     elif page == "🎯 执行选股":
