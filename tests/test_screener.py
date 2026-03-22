@@ -99,7 +99,11 @@ class TestScreenerHelpers(unittest.TestCase):
             "pattern_golden_cross": 0,
         }
 
-        detail = screener.format_stock_detail(record)
+        field_meta = {
+            "ts_code": {"cn_name": "股票代码", "cn_desc": "Tushare 标准代码"},
+            "break_high_20": {"cn_name": "突破20日新高", "cn_desc": "今日最高价是否突破近 20 日最高"},
+        }
+        detail = screener.format_stock_detail(record, field_meta=field_meta)
 
         all_fields = {item["field"] for items in detail.values() for item in items}
         self.assertEqual(all_fields, set(record.keys()))
@@ -114,6 +118,30 @@ class TestScreenerHelpers(unittest.TestCase):
         }
         self.assertEqual(momentum_items["break_high_20"], "命中")
         self.assertEqual(pattern_items["pattern_golden_cross"], "未命中")
+
+        ts_code_row = [item for item in detail["基础标识"] if item["field"] == "ts_code"][0]
+        self.assertEqual(ts_code_row["cn_name"], "股票代码")
+        self.assertEqual(ts_code_row["cn_desc"], "Tushare 标准代码")
+
+    def test_parse_field_dictionary_markdown_extracts_cn_name_and_desc(self):
+        """应能从数据字典 markdown 解析出字段中文名和中文说明"""
+        markdown_text = (
+            "| 字段 | 中文说明 | English Description | 类型 | 样例值 | 观察 |\n"
+            "|---|---|---|---|---|---|\n"
+            "| `ts_code` | 股票代码（Tushare 标准） | Security code | `str` | `000001.SZ` | x |\n"
+            "| `pe_ttm` | 滚动市盈率 TTM | Trailing P/E | `float64` | `4.9` | x |\n"
+            "\n"
+            "| 字段 | 中文口径 | English |\n"
+            "|---|---|---|\n"
+            "| `break_high_20/60` | 今日最高价是否大于对应窗口前 N 日最高价 | ... |\n"
+        )
+
+        meta = screener.parse_field_dictionary_markdown(markdown_text)
+
+        self.assertEqual(meta["ts_code"]["cn_name"], "股票代码（Tushare 标准）")
+        self.assertEqual(meta["ts_code"]["cn_desc"], "")
+        self.assertEqual(meta["break_high_20"]["cn_desc"], "今日最高价是否大于对应窗口前 N 日最高价")
+        self.assertEqual(meta["break_high_60"]["cn_desc"], "今日最高价是否大于对应窗口前 N 日最高价")
 
 
 class TestScreenerPresentation(unittest.TestCase):
@@ -162,6 +190,23 @@ class TestScreenerPresentation(unittest.TestCase):
 
         self.assertEqual(record["name"], "万科A")
         self.assertEqual(record["close"], 9.88)
+
+    def test_apply_screener_filters_returns_all_rows_when_no_filters_selected(self):
+        """没有任何条件时应返回全量结果"""
+        df = pd.DataFrame(
+            [
+                {"ts_code": "000001.SZ", "name": "平安银行"},
+                {"ts_code": "000002.SZ", "name": "万科A"},
+            ]
+        )
+
+        result = screener.apply_screener_filters(df)
+
+        self.assertEqual(result["ts_code"].tolist(), ["000001.SZ", "000002.SZ"])
+
+    def test_get_result_table_height_uses_fixed_tall_layout(self):
+        """结果表高度应使用较高固定值，接近左栏高度"""
+        self.assertGreaterEqual(screener.get_result_table_height(), 720)
 
     def test_app_py_contains_screener_route(self):
         """app.py 应接入选股器导航和渲染路由"""

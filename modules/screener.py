@@ -6,6 +6,7 @@ Parquet 选股器页面与筛选逻辑
 from pathlib import Path
 
 import pandas as pd
+import re
 
 try:
     import streamlit as st
@@ -31,6 +32,7 @@ except ModuleNotFoundError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_FILE = PROJECT_ROOT / "data" / "data.parquet"
+FIELD_DICT_FILE = PROJECT_ROOT / "data" / "screener_daily_20260317_数据字典.md"
 
 RESULT_COLUMNS = [
     "ts_code",
@@ -44,6 +46,8 @@ RESULT_COLUMNS = [
     "vol_ratio_5",
     "net_mf_amount",
 ]
+
+RESULT_TABLE_HEIGHT = 780
 
 CUSTOM_FILTER_GROUPS = {
     "估值指标": ["pe", "pe_ttm", "pb", "ps", "ps_ttm", "dv_ratio", "dv_ttm", "total_mv", "circ_mv"],
@@ -217,6 +221,100 @@ FIELD_GROUPS = {
     ],
 }
 
+FIELD_ROW_RE = re.compile(
+    r"^\|\s*`(?P<field>[^`]+)`\s*\|\s*(?P<cn_name>[^|]+?)\s*\|\s*(?P<en_desc>[^|]+?)\s*\|"
+)
+FORMULA_ROW_RE = re.compile(
+    r"^\|\s*`(?P<field>[^`]+)`\s*\|\s*(?P<cn_desc>[^|]+?)\s*\|"
+)
+
+
+def expand_compound_field_key(field_key):
+    """
+    将类似 break_high_20/60/120/250 的复合键展开为字段列表。
+    规则：
+    - 如果分段后第一个 token 含 '_'，后续 token 若不含 '_' 则继承前缀。
+    """
+    if "/" not in field_key:
+        return [field_key]
+
+    parts = [part.strip() for part in field_key.split("/") if part.strip()]
+    if not parts:
+        return []
+
+    first = parts[0]
+    expanded = [first]
+
+    if "_" in first:
+        prefix = first.rsplit("_", 1)[0] + "_"
+        for part in parts[1:]:
+            expanded.append(part if "_" in part else f"{prefix}{part}")
+    else:
+        expanded.extend(parts[1:])
+
+    return expanded
+
+
+def parse_field_dictionary_markdown(markdown_text):
+    """解析数据字典 markdown，返回字段元数据映射"""
+    meta = {}
+    formula_notes = {}
+    in_formula_section = False
+
+    for raw_line in (markdown_text or "").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("|"):
+            continue
+
+        if "字段" in line and "中文口径" in line:
+            in_formula_section = True
+            continue
+
+        if in_formula_section and line.startswith("| 字段"):
+            continue
+
+        if in_formula_section and line.startswith("|---"):
+            continue
+
+        if in_formula_section and line.count("|") < 3:
+            continue
+
+        if in_formula_section:
+            match = FORMULA_ROW_RE.match(line)
+            if not match:
+                continue
+            field_key = match.group("field").strip()
+            cn_desc = match.group("cn_desc").strip()
+            for field in expand_compound_field_key(field_key):
+                formula_notes[field] = cn_desc
+            continue
+
+        match = FIELD_ROW_RE.match(line)
+        if match:
+            field = match.group("field").strip()
+            cn_name = match.group("cn_name").strip()
+            meta[field] = {"cn_name": cn_name, "cn_desc": ""}
+            continue
+
+    for field, cn_desc in formula_notes.items():
+        meta.setdefault(field, {"cn_name": "", "cn_desc": ""})
+        meta[field]["cn_desc"] = cn_desc
+
+    return meta
+
+
+@st.cache_data(show_spinner=False)
+def load_field_meta(file_path=None):
+    """从数据字典文件加载字段元数据"""
+    target = Path(file_path) if file_path else FIELD_DICT_FILE
+    if not target.exists():
+        return {}
+    try:
+        text = target.read_text(encoding="utf-8")
+    except Exception:
+        return {}
+    return parse_field_dictionary_markdown(text)
+
 
 @st.cache_data(show_spinner=False)
 def load_screener_data(file_path=None):
@@ -329,18 +427,22 @@ def find_field_group(field):
     return "其他字段"
 
 
-def format_stock_detail(record):
+def format_stock_detail(record, field_meta=None):
     """将单条记录按分组格式化"""
+    field_meta = field_meta if field_meta is not None else load_field_meta()
     detail = {group_name: [] for group_name in FIELD_GROUPS}
     detail["其他字段"] = []
 
     for field, value in record.items():
         group_name = find_field_group(field)
+        meta = field_meta.get(field, {})
         detail[group_name].append(
             {
                 "field": field,
                 "value": value,
                 "display_value": format_display_value(field, value),
+                "cn_name": meta.get("cn_name", ""),
+                "cn_desc": meta.get("cn_desc", ""),
             }
         )
 
@@ -351,6 +453,11 @@ def build_result_table(df):
     """构建结果表主字段"""
     available_columns = [column for column in RESULT_COLUMNS if column in df.columns]
     return df[available_columns].copy()
+
+
+def get_result_table_height():
+    """返回结果表固定高度"""
+    return RESULT_TABLE_HEIGHT
 
 
 def get_stock_record(df, ts_code):
@@ -366,6 +473,7 @@ def init_screener_state():
     st.session_state.setdefault("screener_results", None)
     st.session_state.setdefault("screener_selected_stock", None)
     st.session_state.setdefault("screener_last_error", None)
+    st.session_state.setdefault("screener_condition_count", 0)
 
 
 def clear_screener_filters():
@@ -405,6 +513,38 @@ def collect_custom_rules():
             if operator != "不筛选":
                 rules.append({"field": field, "operator": operator, "value": value})
     return rules
+
+
+def run_screener_filters(df):
+    """根据当前 session_state 自动执行筛选"""
+    selected_presets = collect_selected_options(PRESET_RULES, "screener_preset")
+    selected_momentum = collect_selected_options(MOMENTUM_OPTIONS, "screener_momentum")
+    selected_patterns = collect_selected_options(PATTERN_OPTIONS, "screener_pattern")
+    custom_rules = collect_custom_rules()
+
+    try:
+        results = apply_screener_filters(
+            df,
+            selected_presets=selected_presets,
+            selected_momentum=selected_momentum,
+            selected_patterns=selected_patterns,
+            custom_rules=custom_rules,
+        )
+    except ValueError as exc:
+        st.session_state["screener_results"] = None
+        st.session_state["screener_last_error"] = str(exc)
+        st.session_state["screener_selected_stock"] = None
+        st.session_state["screener_condition_count"] = 0
+    else:
+        st.session_state["screener_results"] = results
+        st.session_state["screener_last_error"] = None
+        st.session_state["screener_selected_stock"] = None
+        st.session_state["screener_condition_count"] = count_selected_conditions(
+            selected_presets,
+            selected_momentum,
+            selected_patterns,
+            custom_rules,
+        )
 
 
 def render_toggle_group(title, option_mapping, key_prefix, columns_per_row=3):
@@ -459,7 +599,15 @@ def render_stock_detail(detail):
     for group_name, items in detail.items():
         with st.expander(group_name, expanded=group_name in {"基础标识", "估值与市值", "价格与成交"}):
             detail_df = pd.DataFrame(
-                [{"字段": item["field"], "值": item["display_value"]} for item in items]
+                [
+                    {
+                        "字段英文名": item["field"],
+                        "中文字段名": item.get("cn_name", ""),
+                        "中文说明": item.get("cn_desc", ""),
+                        "值": item["display_value"],
+                    }
+                    for item in items
+                ]
             )
             st.dataframe(detail_df, use_container_width=True, hide_index=True)
 
@@ -496,6 +644,7 @@ def render_results_panel(results, latest_trade_date):
         selector_table,
         use_container_width=True,
         hide_index=True,
+        height=get_result_table_height(),
         disabled=[column for column in selector_table.columns if column != "更多"],
         column_config=editor_config,
         key="screener_result_editor",
@@ -528,6 +677,8 @@ def render():
 
     latest_trade_date = get_latest_trade_date(df)
     latest_df = df[df["trade_date"].astype(str) == latest_trade_date].copy()
+    if st.session_state.get("screener_results") is None and st.session_state.get("screener_last_error") is None:
+        run_screener_filters(latest_df)
 
     left_col, right_col = st.columns([1.05, 1.95], gap="large")
 
@@ -535,56 +686,79 @@ def render():
         st.markdown("### 筛选条件")
         st.text_input("交易日期", value=latest_trade_date, disabled=True)
 
-        with st.form("screener_filters_form"):
-            st.markdown("#### 预设条件")
-            preset_columns = st.columns(2)
-            preset_labels = list(PRESET_RULES.keys())
-            for index, label in enumerate(preset_labels):
-                with preset_columns[index % 2]:
-                    st.checkbox(label, key=f"screener_preset_{label}")
+        st.markdown("#### 预设条件")
+        preset_columns = st.columns(2)
+        preset_labels = list(PRESET_RULES.keys())
+        for index, label in enumerate(preset_labels):
+            with preset_columns[index % 2]:
+                st.checkbox(
+                    label,
+                    key=f"screener_preset_{label}",
+                    on_change=run_screener_filters,
+                    args=(latest_df,),
+                )
 
-            render_toggle_group("动量因子快选", MOMENTUM_OPTIONS, "screener_momentum", columns_per_row=3)
-            render_toggle_group("技术形态快选", PATTERN_OPTIONS, "screener_pattern", columns_per_row=3)
-            render_custom_filters(latest_df)
+        st.markdown("#### 动量因子快选")
+        momentum_labels = list(MOMENTUM_OPTIONS.keys())
+        for start in range(0, len(momentum_labels), 3):
+            columns = st.columns(3)
+            row_labels = momentum_labels[start:start + 3]
+            for index, label in enumerate(row_labels):
+                with columns[index]:
+                    st.checkbox(
+                        label,
+                        key=f"screener_momentum_{label}",
+                        on_change=run_screener_filters,
+                        args=(latest_df,),
+                    )
 
-            action_col1, action_col2 = st.columns(2)
-            with action_col1:
-                start_filter = st.form_submit_button("开始筛选", use_container_width=True, type="primary")
-            with action_col2:
-                reset_filter = st.form_submit_button("重置", use_container_width=True)
+        st.markdown("#### 技术形态快选")
+        pattern_labels = list(PATTERN_OPTIONS.keys())
+        for start in range(0, len(pattern_labels), 3):
+            columns = st.columns(3)
+            row_labels = pattern_labels[start:start + 3]
+            for index, label in enumerate(row_labels):
+                with columns[index]:
+                    st.checkbox(
+                        label,
+                        key=f"screener_pattern_{label}",
+                        on_change=run_screener_filters,
+                        args=(latest_df,),
+                    )
 
-        if reset_filter:
+        st.markdown("#### 自定义筛选")
+        for group_name, fields in CUSTOM_FILTER_GROUPS.items():
+            with st.expander(group_name, expanded=group_name in {"估值指标", "价格与涨幅", "成交与流动性"}):
+                for field in fields:
+                    if field not in latest_df.columns:
+                        continue
+
+                    label_col, op_col, value_col = st.columns([2.2, 1.4, 1.8])
+                    with label_col:
+                        st.caption(field)
+                    with op_col:
+                        st.selectbox(
+                            "运算符",
+                            options=OPERATORS,
+                            key=f"screener_op_{field}",
+                            label_visibility="collapsed",
+                            on_change=run_screener_filters,
+                            args=(latest_df,),
+                        )
+                    with value_col:
+                        st.number_input(
+                            "值",
+                            value=float(st.session_state.get(f"screener_value_{field}", 0.0)),
+                            key=f"screener_value_{field}",
+                            label_visibility="collapsed",
+                            on_change=run_screener_filters,
+                            args=(latest_df,),
+                        )
+
+        if st.button("重置", use_container_width=True):
             clear_screener_filters()
+            run_screener_filters(latest_df)
             st.rerun()
-
-        if start_filter:
-            selected_presets = collect_selected_options(PRESET_RULES, "screener_preset")
-            selected_momentum = collect_selected_options(MOMENTUM_OPTIONS, "screener_momentum")
-            selected_patterns = collect_selected_options(PATTERN_OPTIONS, "screener_pattern")
-            custom_rules = collect_custom_rules()
-
-            try:
-                results = apply_screener_filters(
-                    latest_df,
-                    selected_presets=selected_presets,
-                    selected_momentum=selected_momentum,
-                    selected_patterns=selected_patterns,
-                    custom_rules=custom_rules,
-                )
-            except ValueError as exc:
-                st.session_state["screener_results"] = None
-                st.session_state["screener_last_error"] = str(exc)
-                st.session_state["screener_selected_stock"] = None
-            else:
-                st.session_state["screener_results"] = results
-                st.session_state["screener_last_error"] = None
-                st.session_state["screener_selected_stock"] = None
-                st.session_state["screener_condition_count"] = count_selected_conditions(
-                    selected_presets,
-                    selected_momentum,
-                    selected_patterns,
-                    custom_rules,
-                )
 
         if st.session_state.get("screener_last_error"):
             st.error(st.session_state["screener_last_error"])
