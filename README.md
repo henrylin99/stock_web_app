@@ -24,6 +24,10 @@
 
 ## 🚀 快速开始
 
+### 基础知识学习
+- B站有相关的视频，地址：https://space.bilibili.com/363297026
+- 或者搜索"星海微澜心"
+
 ### 视频介绍
 - 可通过百度网盘下载： https://pan.baidu.com/s/1TnXEi2vqZtubRuq-lfMtGQ?pwd=ffvy
 
