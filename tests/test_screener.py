@@ -45,7 +45,8 @@ class TestScreenerHelpers(unittest.TestCase):
                     "turnover_rate": 5,
                     "pct_chg": 3,
                     "break_high_20": 1,
-                    "pattern_golden_cross": 1,
+                    # 有些 parquet 落盘会把 0/1 写成字符串
+                    "pattern_golden_cross": "1",
                 },
                 {
                     "ts_code": "B",
@@ -54,7 +55,7 @@ class TestScreenerHelpers(unittest.TestCase):
                     "turnover_rate": 5,
                     "pct_chg": 3,
                     "break_high_20": 1,
-                    "pattern_golden_cross": 0,
+                    "pattern_golden_cross": "0",
                 },
                 {
                     "ts_code": "C",
@@ -63,7 +64,7 @@ class TestScreenerHelpers(unittest.TestCase):
                     "turnover_rate": 5,
                     "pct_chg": 3,
                     "break_high_20": 1,
-                    "pattern_golden_cross": 1,
+                    "pattern_golden_cross": "1",
                 },
             ]
         )

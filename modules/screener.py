@@ -396,7 +396,7 @@ def apply_screener_filters(
     result = df.copy()
 
     for field in momentum_fields + pattern_fields:
-        result = result[result[field] == 1]
+        result = result[coerce_flag_hit(result[field])]
 
     for rule in preset_rules + custom_rules:
         result = apply_numeric_rule(result, rule["field"], rule["operator"], rule["value"])
@@ -411,11 +411,21 @@ def is_flag_field(field):
         "consec_up_5",
     }
 
+def coerce_flag_hit(series):
+    """将 flag 列兼容转换为 0/1 命中布尔掩码（兼容 str/float/bool/int）"""
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.notna().any():
+        return numeric.fillna(0).astype(int) == 1
+    return series.astype(str).str.strip().eq("1")
+
 
 def format_display_value(field, value):
     """格式化详情展示值"""
     if is_flag_field(field):
-        return "命中" if int(value) == 1 else "未命中"
+        try:
+            return "命中" if int(float(value)) == 1 else "未命中"
+        except Exception:
+            return "命中" if str(value).strip() == "1" else "未命中"
     return value
 
 
