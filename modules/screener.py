@@ -484,16 +484,16 @@ def get_stock_record(df, ts_code):
 def init_screener_state():
     """初始化页面状态"""
     st.session_state.setdefault("screener_results", None)
-    st.session_state.setdefault("screener_selected_stock", None)
     st.session_state.setdefault("screener_last_error", None)
-    st.session_state.setdefault("screener_condition_count", 0)
 
 
 def clear_screener_filters():
     """清空筛选状态和表单值"""
     st.session_state["screener_results"] = None
-    st.session_state["screener_selected_stock"] = None
     st.session_state["screener_last_error"] = None
+
+    if "screener_detail_input" in st.session_state:
+        st.session_state["screener_detail_input"] = ""
 
     for label in PRESET_RULES:
         st.session_state[f"screener_preset_{label}"] = False
@@ -546,18 +546,9 @@ def run_screener_filters(df):
     except ValueError as exc:
         st.session_state["screener_results"] = None
         st.session_state["screener_last_error"] = str(exc)
-        st.session_state["screener_selected_stock"] = None
-        st.session_state["screener_condition_count"] = 0
     else:
         st.session_state["screener_results"] = results
         st.session_state["screener_last_error"] = None
-        st.session_state["screener_selected_stock"] = None
-        st.session_state["screener_condition_count"] = count_selected_conditions(
-            selected_presets,
-            selected_momentum,
-            selected_patterns,
-            custom_rules,
-        )
 
 
 def render_toggle_group(title, option_mapping, key_prefix, columns_per_row=3):
