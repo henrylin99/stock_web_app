@@ -203,7 +203,7 @@ class TestScreenerPresentation(unittest.TestCase):
 
         result = screener.build_result_table(df)
 
-        expected_labels = ["链接"] + [
+        expected_labels = [
             screener.RESULT_COLUMN_LABELS.get(col, col)
             for col in screener.RESULT_COLUMNS
         ]
@@ -213,13 +213,13 @@ class TestScreenerPresentation(unittest.TestCase):
         """结果表缺少部分字段时不应报错"""
         df = pd.DataFrame([{"ts_code": "000001.SZ", "name": "平安银行"}])
         result = screener.build_result_table(df)
-        self.assertEqual(result.columns.tolist(), ["链接", "代码", "名称"])
+        self.assertEqual(result.columns.tolist(), ["代码", "名称"])
 
-    def test_build_result_table_link_column_uses_10jqka_url(self):
-        """链接列应生成同花顺 URL，去掉交易所后缀"""
+    def test_build_result_table_code_column_uses_10jqka_url(self):
+        """代码列值应为同花顺 URL，去掉交易所后缀"""
         df = pd.DataFrame([{"ts_code": "000001.SZ", "name": "平安银行"}])
         result = screener.build_result_table(df)
-        self.assertEqual(result["链接"].iloc[0], "https://stockpage.10jqka.com.cn/000001/")
+        self.assertEqual(result["代码"].iloc[0], "https://stockpage.10jqka.com.cn/000001/")
 
     def test_get_stock_record_resolves_full_row_by_ts_code(self):
         """应能通过 ts_code 找到完整记录"""
