@@ -654,9 +654,6 @@ def clear_screener_filters():
     st.session_state["screener_results"] = None
     st.session_state["screener_last_error"] = None
 
-    if "screener_detail_input" in st.session_state:
-        st.session_state["screener_detail_input"] = ""
-
     for label in PRESET_RULES:
         st.session_state[f"screener_preset_{label}"] = False
     for label in MOMENTUM_OPTIONS:
@@ -845,33 +842,35 @@ def _render_results_area(results):
     # 空结果提示 / 结果表
     if results.empty:
         st.warning("暂无符合条件的股票，请调整筛选条件。")
-    else:
-        result_table = build_result_table(results)
-        st.dataframe(
-            result_table,
-            use_container_width=True,
-            hide_index=True,
-            height=get_result_table_height(),
-            column_config={
-                "代码": st.column_config.LinkColumn(
-                    "代码",
-                    display_text=r"https://stockpage\.10jqka\.com\.cn/(\d+)/",
-                ),
-            },
-        )
+        return
 
-    # 股票详情输入（有结果后始终显示，results is None 时早返回不到这里）
-    ts_code_input = st.text_input(
-        "查看股票详情，输入代码（如 000001.SZ）",
-        key="screener_detail_input",
+    result_table = build_result_table(results)
+    # 在最前面插入 checkbox 列，用于选择查看详情
+    detail_table = result_table.copy()
+    detail_table.insert(0, "详情", False)
+
+    edited = st.data_editor(
+        detail_table,
+        use_container_width=True,
+        hide_index=True,
+        height=get_result_table_height(),
+        column_config={
+            "详情": st.column_config.CheckboxColumn("详情", help="勾选查看完整字段"),
+            "代码": st.column_config.LinkColumn(
+                "代码",
+                display_text=r"https://stockpage\.10jqka\.com\.cn/(\d+)/",
+            ),
+        },
+        disabled=[col for col in detail_table.columns if col != "详情"],
     )
-    if ts_code_input and not results.empty:
-        match = results[results["ts_code"] == ts_code_input.strip()]
-        if not match.empty:
-            record = match.iloc[0].to_dict()
-            detail = format_stock_detail(record)
-            render_stock_detail(detail)
-        # 不在结果集中：静默，不报错
+
+    selected = edited[edited["详情"]]
+    if not selected.empty:
+        # 从原始 results 里取完整记录（result_table 的代码列已替换为 URL）
+        selected_idx = selected.index[0]
+        record = results.iloc[selected_idx].to_dict()
+        detail = format_stock_detail(record)
+        render_stock_detail(detail)
 
 
 def render():
