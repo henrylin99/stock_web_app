@@ -46,7 +46,7 @@ SCREENER_DATA_FILE = _resolve_seed_file(
 SCREENER_FIELD_DICT_FILE = os.path.abspath(
     os.getenv(
         'SCREENER_FIELD_DICT_FILE',
-        os.path.join(DOCS_DIR, 'screener_daily_20260317_数据字典.md')
+        os.path.join(DOCS_DIR, '宽表数据字典.md')
     )
 )
 
