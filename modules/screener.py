@@ -388,10 +388,13 @@ def apply_screener_filters(
     pattern_fields = resolve_flag_fields(selected_patterns, PATTERN_OPTIONS)
     custom_rules = custom_rules or []
 
-    required_fields = [rule["field"] for rule in preset_rules + custom_rules]
-    required_fields.extend(momentum_fields)
-    required_fields.extend(pattern_fields)
-    validate_required_columns(df, required_fields)
+    # 静默跳过不存在字段（兼容旧快照）
+    momentum_fields = [f for f in momentum_fields if f in df.columns]
+    pattern_fields = [f for f in pattern_fields if f in df.columns]
+    custom_rules = [r for r in custom_rules if r["field"] in df.columns]
+
+    # 仅对 preset_rules 保留校验（预设字段应始终存在于数据文件）
+    validate_required_columns(df, [rule["field"] for rule in preset_rules])
 
     result = df.copy()
 
