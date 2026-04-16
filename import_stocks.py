@@ -10,6 +10,7 @@ import pandas as pd
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import config
 from utils.db_helper import get_db_connection
 
 
@@ -19,7 +20,7 @@ def import_stocks_from_csv():
     print("📥 导入A股列表")
     print("=" * 60)
 
-    csv_path = "data/stock_basic.csv"
+    csv_path = config.STOCK_BASIC_CSV
 
     try:
         # 读取CSV文件

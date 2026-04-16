@@ -275,8 +275,7 @@ def _import_trade_calendar(cursor):
     """
     import os
     try:
-        csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                'data', 'stock_trade_calendar.csv')
+        csv_path = config.TRADE_CALENDAR_CSV
 
         if not os.path.exists(csv_path):
             print(f"⚠️ 交易日历文件不存在: {csv_path}")

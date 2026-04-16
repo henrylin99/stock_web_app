@@ -5,16 +5,50 @@
 
 import os
 
+
+def _resolve_seed_file(env_name, primary_path, fallback_path):
+    """优先使用显式环境变量，其次使用目标数据目录，最后回退到仓库内置种子文件。"""
+    env_value = os.getenv(env_name)
+    if env_value:
+        return os.path.abspath(env_value)
+    if os.path.exists(primary_path):
+        return os.path.abspath(primary_path)
+    return os.path.abspath(fallback_path)
+
+
 # ============ 项目路径 ============
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-CACHE_DIR = os.path.join(DATA_DIR, 'cache')
-EXPORT_DIR = os.path.join(DATA_DIR, 'exports')
-LOG_DIR = os.path.join(BASE_DIR, 'logs')
+DOCS_DIR = os.path.join(BASE_DIR, 'docs')
+REPO_DATA_DIR = os.path.join(BASE_DIR, 'data')
+DATA_DIR = os.path.abspath(os.getenv('DATA_DIR', REPO_DATA_DIR))
+CACHE_DIR = os.path.abspath(os.getenv('CACHE_DIR', os.path.join(DATA_DIR, 'cache')))
+EXPORT_DIR = os.path.abspath(os.getenv('EXPORT_DIR', os.path.join(DATA_DIR, 'exports')))
+LOG_DIR = os.path.abspath(os.getenv('LOG_DIR', os.path.join(BASE_DIR, 'logs')))
 TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
 
 # ============ 数据库配置 ============
-DB_PATH = os.path.join(DATA_DIR, 'stock_data.db')
+DB_PATH = os.path.abspath(os.getenv('DB_PATH', os.path.join(DATA_DIR, 'stock_data.db')))
+TRADE_CALENDAR_CSV = _resolve_seed_file(
+    'TRADE_CALENDAR_CSV',
+    os.path.join(DATA_DIR, 'stock_trade_calendar.csv'),
+    os.path.join(REPO_DATA_DIR, 'stock_trade_calendar.csv'),
+)
+STOCK_BASIC_CSV = _resolve_seed_file(
+    'STOCK_BASIC_CSV',
+    os.path.join(DATA_DIR, 'stock_basic.csv'),
+    os.path.join(REPO_DATA_DIR, 'stock_basic.csv'),
+)
+SCREENER_DATA_FILE = _resolve_seed_file(
+    'SCREENER_DATA_FILE',
+    os.path.join(DATA_DIR, 'data.parquet'),
+    os.path.join(REPO_DATA_DIR, 'data.parquet'),
+)
+SCREENER_FIELD_DICT_FILE = os.path.abspath(
+    os.getenv(
+        'SCREENER_FIELD_DICT_FILE',
+        os.path.join(DOCS_DIR, 'screener_daily_20260317_数据字典.md')
+    )
+)
 
 # ============ baostock配置 ============
 BAOSTOCK_URL = "http://baostock.com/selenium/api"

@@ -1,0 +1,16 @@
+.git
+.worktrees
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+logs/*.log
+data/cache/
+data/exports/
+data/stock_data.db

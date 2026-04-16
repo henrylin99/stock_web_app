@@ -8,6 +8,8 @@ from pathlib import Path
 import pandas as pd
 import re
 
+import config
+
 try:
     import streamlit as st
 except ModuleNotFoundError:
@@ -29,10 +31,8 @@ except ModuleNotFoundError:
 
     st = _StreamlitStub()
 
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_FILE = PROJECT_ROOT / "data" / "data.parquet"
-FIELD_DICT_FILE = PROJECT_ROOT / "data" / "screener_daily_20260317_数据字典.md"
+DATA_FILE = Path(config.SCREENER_DATA_FILE)
+FIELD_DICT_FILE = Path(config.SCREENER_FIELD_DICT_FILE)
 
 RESULT_COLUMNS = [
     "ts_code",
