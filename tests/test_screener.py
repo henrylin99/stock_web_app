@@ -203,13 +203,17 @@ class TestScreenerPresentation(unittest.TestCase):
 
         result = screener.build_result_table(df)
 
-        self.assertEqual(result.columns.tolist(), screener.RESULT_COLUMNS)
+        expected_labels = [
+            screener.RESULT_COLUMN_LABELS.get(col, col)
+            for col in screener.RESULT_COLUMNS
+        ]
+        self.assertEqual(result.columns.tolist(), expected_labels)
 
     def test_build_result_table_skips_missing_optional_columns(self):
         """结果表缺少部分字段时不应报错"""
         df = pd.DataFrame([{"ts_code": "000001.SZ", "name": "平安银行"}])
         result = screener.build_result_table(df)
-        self.assertEqual(result.columns.tolist(), ["ts_code", "name"])
+        self.assertEqual(result.columns.tolist(), ["代码", "名称"])
 
     def test_get_stock_record_resolves_full_row_by_ts_code(self):
         """应能通过 ts_code 找到完整记录"""

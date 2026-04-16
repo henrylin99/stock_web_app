@@ -604,10 +604,26 @@ def format_stock_detail(record, field_meta=None):
     return {group: items for group, items in detail.items() if items}
 
 
+RESULT_COLUMN_LABELS = {
+    "ts_code": "代码",
+    "name": "名称",
+    "industry": "行业",
+    "close": "收盘价",
+    "pct_chg": "涨跌幅%",
+    "pe_ttm": "市盈率TTM",
+    "pb": "市净率",
+    "turnover_rate": "换手率%",
+    "vol_ratio_5": "5日量比",
+    "net_mf_amount": "净流入(万)",
+}
+
+
 def build_result_table(df):
-    """构建结果表主字段"""
+    """构建结果表主字段，列名显示中文"""
     available_columns = [column for column in RESULT_COLUMNS if column in df.columns]
-    return df[available_columns].copy()
+    table = df[available_columns].copy()
+    rename_map = {col: RESULT_COLUMN_LABELS.get(col, col) for col in available_columns}
+    return table.rename(columns=rename_map)
 
 
 def get_result_table_height():
