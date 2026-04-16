@@ -632,11 +632,6 @@ def render_custom_filters(df):
                     )
 
 
-def count_selected_conditions(selected_presets, selected_momentum, selected_patterns, custom_rules):
-    """统计当前已选条件数"""
-    return len(selected_presets) + len(selected_momentum) + len(selected_patterns) + len(custom_rules)
-
-
 def render_stock_detail(detail):
     """渲染单股完整详情"""
     st.markdown("### 股票完整字段")
