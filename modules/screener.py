@@ -619,9 +619,17 @@ RESULT_COLUMN_LABELS = {
 
 
 def build_result_table(df):
-    """构建结果表主字段，列名显示中文"""
+    """构建结果表主字段，列名显示中文，代码列附带同花顺链接"""
     available_columns = [column for column in RESULT_COLUMNS if column in df.columns]
     table = df[available_columns].copy()
+    if "ts_code" in table.columns:
+        table.insert(
+            0,
+            "链接",
+            table["ts_code"].str.split(".").str[0].apply(
+                lambda code: f"https://stockpage.10jqka.com.cn/{code}/"
+            ),
+        )
     rename_map = {col: RESULT_COLUMN_LABELS.get(col, col) for col in available_columns}
     return table.rename(columns=rename_map)
 
@@ -848,6 +856,9 @@ def _render_results_area(results):
             use_container_width=True,
             hide_index=True,
             height=get_result_table_height(),
+            column_config={
+                "链接": st.column_config.LinkColumn("链接", display_text="同花顺"),
+            },
         )
 
     # 股票详情输入（有结果后始终显示，results is None 时早返回不到这里）
