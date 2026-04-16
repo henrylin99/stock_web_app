@@ -238,9 +238,9 @@ class TestScreenerPresentation(unittest.TestCase):
 
         self.assertEqual(result["ts_code"].tolist(), ["000001.SZ", "000002.SZ"])
 
-    def test_get_result_table_height_uses_fixed_tall_layout(self):
-        """结果表高度应使用较高固定值，接近左栏高度"""
-        self.assertGreaterEqual(screener.get_result_table_height(), 720)
+    def test_get_result_table_height_returns_500(self):
+        """结果表高度应为 500（上下布局不需要 780 的高度）"""
+        self.assertEqual(screener.get_result_table_height(), 500)
 
     def test_app_py_contains_screener_route(self):
         """app.py 应接入选股器导航和渲染路由"""

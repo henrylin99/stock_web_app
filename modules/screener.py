@@ -47,7 +47,7 @@ RESULT_COLUMNS = [
     "net_mf_amount",
 ]
 
-RESULT_TABLE_HEIGHT = 780
+RESULT_TABLE_HEIGHT = 500
 
 CUSTOM_FILTER_GROUPS = {
     "估值指标": ["pe", "pe_ttm", "pb", "ps", "ps_ttm", "dv_ratio", "dv_ttm", "total_mv", "circ_mv"],
@@ -553,7 +553,8 @@ def run_screener_filters(df):
 
 def render_toggle_group(title, option_mapping, key_prefix, columns_per_row=3):
     """渲染多选开关网格"""
-    st.markdown(f"#### {title}")
+    if title:  # 空字符串时不渲染标题行（tabs 场景下 title 传空字符串）
+        st.markdown(f"#### {title}")
     labels = list(option_mapping.keys())
     for start in range(0, len(labels), columns_per_row):
         columns = st.columns(columns_per_row)
