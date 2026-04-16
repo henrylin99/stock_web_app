@@ -13,7 +13,23 @@ import config
 try:
     import streamlit as st
 except ModuleNotFoundError:
+    class _SessionStateStub(dict):
+        """Minimal session_state stub that supports dict and attribute access."""
+        def __getattr__(self, key):
+            try:
+                return self[key]
+            except KeyError:
+                raise AttributeError(key)
+
+        def __setattr__(self, key, value):
+            self[key] = value
+
+        def get(self, key, default=None):
+            return super().get(key, default)
+
     class _StreamlitStub:
+        session_state = _SessionStateStub()
+
         @staticmethod
         def cache_data(show_spinner=False):
             def decorator(func):
@@ -526,6 +542,31 @@ def collect_custom_rules():
             if operator != "不筛选":
                 rules.append({"field": field, "operator": operator, "value": value})
     return rules
+
+
+def _collect_active_condition_labels():
+    """从 session_state 收集所有激活的条件标签，返回字符串列表。超过10个时截断。"""
+    labels = []
+    for label in PRESET_RULES:
+        if st.session_state.get(f"screener_preset_{label}", False):
+            labels.append(label)
+    for label in MOMENTUM_OPTIONS:
+        if st.session_state.get(f"screener_momentum_{label}", False):
+            labels.append(label)
+    for label in PATTERN_OPTIONS:
+        if st.session_state.get(f"screener_pattern_{label}", False):
+            labels.append(label)
+    for fields in CUSTOM_FILTER_GROUPS.values():
+        for field in fields:
+            op = st.session_state.get(f"screener_op_{field}", "不筛选")
+            if op != "不筛选":
+                labels.append(field)
+    if len(labels) > 10:
+        total = len(labels)
+        shown = labels[:10]
+        shown.append(f"...等{total}个条件")
+        return shown
+    return labels
 
 
 def run_screener_filters(df):

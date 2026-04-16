@@ -254,5 +254,55 @@ class TestScreenerPresentation(unittest.TestCase):
         self.assertIn("render_screener()", content)
 
 
+class TestCollectActiveConditionLabels(unittest.TestCase):
+    """_collect_active_condition_labels 辅助函数测试"""
+
+    def _run_with_state(self, state_dict):
+        """用 patch.dict 注入假 session_state 后调用函数"""
+        import unittest.mock as mock
+        with mock.patch.dict(screener.st.session_state, state_dict, clear=True):
+            return screener._collect_active_condition_labels()
+
+    def test_returns_empty_when_no_conditions_set(self):
+        result = self._run_with_state({})
+        self.assertEqual(result, [])
+
+    def test_returns_preset_label_when_active(self):
+        result = self._run_with_state({"screener_preset_低估值": True})
+        self.assertIn("低估值", result)
+
+    def test_returns_momentum_label_when_active(self):
+        result = self._run_with_state({"screener_momentum_20日新高": True})
+        self.assertIn("20日新高", result)
+
+    def test_returns_pattern_label_when_active(self):
+        result = self._run_with_state({"screener_pattern_均线金叉": True})
+        self.assertIn("均线金叉", result)
+
+    def test_returns_custom_field_label_when_operator_set(self):
+        result = self._run_with_state({"screener_op_pe_ttm": ">"})
+        self.assertIn("pe_ttm", result)
+
+    def test_truncates_when_more_than_10_active(self):
+        """超过10个条件时截断为前10个 + 摘要项"""
+        state = {}
+        # 制造超过10个激活条件：6个 momentum + 5个 pattern = 11
+        for label in list(screener.MOMENTUM_OPTIONS.keys()):         # 6
+            state[f"screener_momentum_{label}"] = True
+        for label in list(screener.PATTERN_OPTIONS.keys())[:5]:      # 5
+            state[f"screener_pattern_{label}"] = True
+        result = self._run_with_state(state)
+        self.assertEqual(len(result), 11)      # 10 shown + 1 summary
+        self.assertIn("等", result[-1])        # 摘要项含"等"字
+        self.assertIn("11", result[-1])        # 摘要项显示总数11
+
+    def test_does_not_include_inactive_conditions(self):
+        result = self._run_with_state({
+            "screener_preset_低估值": False,
+            "screener_op_pe_ttm": "不筛选",
+        })
+        self.assertEqual(result, [])
+
+
 if __name__ == "__main__":
     unittest.main()
