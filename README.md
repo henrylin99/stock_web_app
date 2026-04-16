@@ -24,6 +24,10 @@
 
 ## 🚀 快速开始
 
+### 单个选股器功能请查看
+- 代码 https://github.com/henrylin99/stock_screener
+- 演示地址 https://stockscreener-production-dd0b.up.railway.app/
+
 ### 基础知识学习
 - B站有相关的视频，地址：https://space.bilibili.com/363297026
 - 或者搜索"星海微澜心"
