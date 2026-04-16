@@ -46,3 +46,5 @@ Thumbs.db
 tmp
 .worktrees/
 docs/
+logs/
+tests/
