@@ -607,8 +607,6 @@ def render_toggle_group(title, option_mapping, key_prefix, columns_per_row=3):
 
 def render_custom_filters(df):
     """渲染自定义筛选区域"""
-    st.markdown("#### 自定义筛选")
-
     for group_name, fields in CUSTOM_FILTER_GROUPS.items():
         with st.expander(group_name, expanded=group_name in {"估值指标", "价格与涨幅", "成交与流动性"}):
             for field in fields:
@@ -658,62 +656,80 @@ def render_stock_detail(detail):
             st.dataframe(detail_df, use_container_width=True, hide_index=True)
 
 
-def render_results_panel(results, latest_trade_date):
-    """渲染结果面板"""
+def _render_title_bar(latest_trade_date):
+    """渲染标题栏: 标题 / 交易日 / 重置按钮"""
+    col_title, col_date, col_reset = st.columns([3, 2, 1])
+    with col_title:
+        st.title("🎛️ 选股器")
+    with col_date:
+        st.metric("交易日", latest_trade_date)
+    with col_reset:
+        st.write("")  # 垂直对齐占位
+        if st.button("重置条件", use_container_width=True):
+            clear_screener_filters()
+            st.rerun()
+
+
+def _render_filter_tabs(latest_df):
+    """渲染筛选区 tabs"""
+    tab_preset, tab_momentum, tab_pattern, tab_custom = st.tabs(
+        ["预设条件", "动量因子", "技术形态", "自定义指标"]
+    )
+    with tab_preset:
+        render_toggle_group("", PRESET_RULES, "screener_preset", columns_per_row=2)
+    with tab_momentum:
+        render_toggle_group("", MOMENTUM_OPTIONS, "screener_momentum", columns_per_row=3)
+    with tab_pattern:
+        render_toggle_group("", PATTERN_OPTIONS, "screener_pattern", columns_per_row=4)
+    with tab_custom:
+        render_custom_filters(latest_df)
+
+
+def _render_results_area(results):
+    """渲染结果面板（results 为 None 时显示初始提示并早返回）"""
     if results is None:
-        st.info("设置筛选条件后，点击“开始筛选”查看结果。")
+        st.info("设置筛选条件后，点击「开始筛选」查看结果。")
         return
 
-    st.markdown("### 筛选结果")
+    # 已选条件摘要
+    active_labels = _collect_active_condition_labels()
+    label_text = " | ".join(active_labels) if active_labels else "（无）"
+    st.caption(f"已选条件：{label_text}")
 
-    summary_col1, summary_col2 = st.columns(2)
-    with summary_col1:
+    # 命中数量
+    col_metric, _ = st.columns([1, 3])
+    with col_metric:
         st.metric("命中数量", len(results))
-    with summary_col2:
-        st.metric("交易日期", latest_trade_date)
 
+    # 空结果提示 / 结果表
     if results.empty:
         st.warning("暂无符合条件的股票，请调整筛选条件。")
-        return
+    else:
+        result_table = build_result_table(results)
+        st.dataframe(
+            result_table,
+            use_container_width=True,
+            hide_index=True,
+            height=get_result_table_height(),
+        )
 
-    result_table = build_result_table(results)
-    selector_table = result_table.copy()
-    selector_table.insert(0, "更多", False)
-
-    editor_config = None
-    if hasattr(st, "column_config"):
-        editor_config = {
-            "更多": st.column_config.CheckboxColumn("更多", help="勾选后查看该股票的完整字段"),
-        }
-
-    edited_table = st.data_editor(
-        selector_table,
-        use_container_width=True,
-        hide_index=True,
-        height=get_result_table_height(),
-        disabled=[column for column in selector_table.columns if column != "更多"],
-        column_config=editor_config,
-        key="screener_result_editor",
+    # 股票详情输入（有结果后始终显示，results is None 时早返回不到这里）
+    ts_code_input = st.text_input(
+        "查看股票详情，输入代码（如 000001.SZ）",
+        key="screener_detail_input",
     )
-
-    selected_rows = edited_table[edited_table["更多"]]
-    if not selected_rows.empty:
-        selected_ts_code = selected_rows.iloc[0]["ts_code"]
-        st.session_state["screener_selected_stock"] = selected_ts_code
-
-    selected_ts_code = st.session_state.get("screener_selected_stock")
-    if selected_ts_code:
-        record = get_stock_record(results, selected_ts_code)
-        detail = format_stock_detail(record)
-        render_stock_detail(detail)
+    if ts_code_input and not results.empty:
+        match = results[results["ts_code"] == ts_code_input.strip()]
+        if not match.empty:
+            record = match.iloc[0].to_dict()
+            detail = format_stock_detail(record)
+            render_stock_detail(detail)
+        # 不在结果集中：静默，不报错
 
 
 def render():
     """渲染选股器页面"""
     init_screener_state()
-
-    st.title("🎛️ 选股器")
-    st.caption("直接读取 data/data.parquet，当日截面多条件筛选。")
 
     try:
         df = load_screener_data()
@@ -723,98 +739,20 @@ def render():
 
     latest_trade_date = get_latest_trade_date(df)
     latest_df = df[df["trade_date"].astype(str) == latest_trade_date].copy()
-    if st.session_state.get("screener_results") is None and st.session_state.get("screener_last_error") is None:
+
+    # 1. 标题栏
+    _render_title_bar(latest_trade_date)
+
+    # 2. 筛选区
+    _render_filter_tabs(latest_df)
+
+    # 3. 筛选按钮 + 错误消息
+    if st.button("开始筛选", use_container_width=True, type="primary"):
         run_screener_filters(latest_df)
+    if st.session_state.get("screener_last_error"):
+        st.error(st.session_state["screener_last_error"])
 
-    left_col, right_col = st.columns([1.05, 1.95], gap="large")
+    st.divider()
 
-    with left_col:
-        st.markdown("### 筛选条件")
-        st.text_input("交易日期", value=latest_trade_date, disabled=True)
-
-        st.markdown("#### 预设条件")
-        preset_columns = st.columns(2)
-        preset_labels = list(PRESET_RULES.keys())
-        for index, label in enumerate(preset_labels):
-            with preset_columns[index % 2]:
-                st.checkbox(
-                    label,
-                    key=f"screener_preset_{label}",
-                    on_change=run_screener_filters,
-                    args=(latest_df,),
-                )
-
-        st.markdown("#### 动量因子快选")
-        momentum_labels = list(MOMENTUM_OPTIONS.keys())
-        for start in range(0, len(momentum_labels), 3):
-            columns = st.columns(3)
-            row_labels = momentum_labels[start:start + 3]
-            for index, label in enumerate(row_labels):
-                with columns[index]:
-                    st.checkbox(
-                        label,
-                        key=f"screener_momentum_{label}",
-                        on_change=run_screener_filters,
-                        args=(latest_df,),
-                    )
-
-        st.markdown("#### 技术形态快选")
-        pattern_labels = list(PATTERN_OPTIONS.keys())
-        for start in range(0, len(pattern_labels), 3):
-            columns = st.columns(3)
-            row_labels = pattern_labels[start:start + 3]
-            for index, label in enumerate(row_labels):
-                with columns[index]:
-                    st.checkbox(
-                        label,
-                        key=f"screener_pattern_{label}",
-                        on_change=run_screener_filters,
-                        args=(latest_df,),
-                    )
-
-        st.markdown("#### 自定义筛选")
-        for group_name, fields in CUSTOM_FILTER_GROUPS.items():
-            with st.expander(group_name, expanded=group_name in {"估值指标", "价格与涨幅", "成交与流动性"}):
-                for field in fields:
-                    if field not in latest_df.columns:
-                        continue
-
-                    label_col, op_col, value_col = st.columns([2.2, 1.4, 1.8])
-                    with label_col:
-                        st.caption(field)
-                    with op_col:
-                        st.selectbox(
-                            "运算符",
-                            options=OPERATORS,
-                            key=f"screener_op_{field}",
-                            label_visibility="collapsed",
-                            on_change=run_screener_filters,
-                            args=(latest_df,),
-                        )
-                    with value_col:
-                        st.number_input(
-                            "值",
-                            value=float(st.session_state.get(f"screener_value_{field}", 0.0)),
-                            key=f"screener_value_{field}",
-                            label_visibility="collapsed",
-                            on_change=run_screener_filters,
-                            args=(latest_df,),
-                        )
-
-        if st.button("重置", use_container_width=True):
-            clear_screener_filters()
-            run_screener_filters(latest_df)
-            st.rerun()
-
-        if st.session_state.get("screener_last_error"):
-            st.error(st.session_state["screener_last_error"])
-
-    with right_col:
-        if st.session_state.get("screener_results") is not None:
-            stats_col1, stats_col2 = st.columns(2)
-            with stats_col1:
-                st.metric("当前数据日期", latest_trade_date)
-            with stats_col2:
-                st.metric("已选条件数", st.session_state.get("screener_condition_count", 0))
-
-        render_results_panel(st.session_state.get("screener_results"), latest_trade_date)
+    # 4. 结果区
+    _render_results_area(st.session_state.get("screener_results"))
