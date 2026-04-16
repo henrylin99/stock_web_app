@@ -653,6 +653,7 @@ def clear_screener_filters():
     """清空筛选状态和表单值"""
     st.session_state["screener_results"] = None
     st.session_state["screener_last_error"] = None
+    st.session_state["screener_detail_select"] = ""
 
     for label in PRESET_RULES:
         st.session_state[f"screener_preset_{label}"] = False
@@ -845,30 +846,30 @@ def _render_results_area(results):
         return
 
     result_table = build_result_table(results)
-    # 在最前面插入 checkbox 列，用于选择查看详情
-    detail_table = result_table.copy()
-    detail_table.insert(0, "详情", False)
-
-    edited = st.data_editor(
-        detail_table,
+    st.dataframe(
+        result_table,
         use_container_width=True,
         hide_index=True,
         height=get_result_table_height(),
         column_config={
-            "详情": st.column_config.CheckboxColumn("详情", help="勾选查看完整字段"),
             "代码": st.column_config.LinkColumn(
                 "代码",
                 display_text=r"https://stockpage\.10jqka\.com\.cn/(\d+)/",
             ),
         },
-        disabled=[col for col in detail_table.columns if col != "详情"],
     )
 
-    selected = edited[edited["详情"]]
-    if not selected.empty:
-        # 从原始 results 里取完整记录（result_table 的代码列已替换为 URL）
-        selected_idx = selected.index[0]
-        record = results.iloc[selected_idx].to_dict()
+    # 下拉选择查看详情
+    options = [f"{row['name']}（{row['ts_code']}）" for _, row in results.iterrows()]
+    selected_label = st.selectbox(
+        "查看股票详情",
+        options=[""] + options,
+        format_func=lambda x: "请选择股票…" if x == "" else x,
+        key="screener_detail_select",
+    )
+    if selected_label:
+        ts_code = selected_label.split("（")[-1].rstrip("）")
+        record = get_stock_record(results, ts_code)
         detail = format_stock_detail(record)
         render_stock_detail(detail)
 
